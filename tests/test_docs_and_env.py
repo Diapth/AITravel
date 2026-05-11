@@ -9,6 +9,13 @@ def test_environment_yaml_targets_product_env():
     assert "pytest==8.4.2" in text
 
 
+def test_runtime_http_dependencies_are_pinned():
+    text = Path("requirements.txt").read_text(encoding="utf-8")
+
+    assert "requests==" in text
+    assert "urllib3==" in text
+
+
 def test_readme_covers_run_stack_and_todo():
     text = Path("README.md").read_text(encoding="utf-8")
 
