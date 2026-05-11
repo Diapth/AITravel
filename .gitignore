@@ -10,6 +10,8 @@ human150.sh
 results.md
 your_tpc_scores.json
 
+tests/
+
 
 # config
 .py*
