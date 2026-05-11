@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
+
+from chinatravel.config import get_env_value
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -17,8 +18,8 @@ REQUIRED_DATABASE_PATHS = (
 )
 
 
-def get_deepseek_api_key() -> str | None:
-    return os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+def get_deepseek_api_key(env_file: str | Path | None = None) -> str | None:
+    return get_env_value("DEEPSEEK_API_KEY", "OPENAI_API_KEY", env_file=env_file)
 
 
 def check_runtime(project_root: Path | None = None) -> dict[str, Any]:

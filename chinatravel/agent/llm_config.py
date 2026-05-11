@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from chinatravel.config import get_bool_env, get_env_value, get_float_env, get_int_env
 
 
 @dataclass(frozen=True)
@@ -28,12 +30,21 @@ class DeepSeekConfig:
         return kwargs
 
 
-def get_deepseek_config() -> DeepSeekConfig:
+def get_deepseek_config(env_file: str | Path | None = None) -> DeepSeekConfig:
     return DeepSeekConfig(
-        api_key=os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("DEEPSEEK_BASE_URL", DeepSeekConfig.base_url),
-        model=os.getenv("DEEPSEEK_MODEL", DeepSeekConfig.model),
-        max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", DeepSeekConfig.max_tokens)),
-        trust_env_proxy=os.getenv("DEEPSEEK_TRUST_ENV_PROXY", "").lower()
-        in {"1", "true", "yes", "on"},
+        api_key=get_env_value("DEEPSEEK_API_KEY", "OPENAI_API_KEY", env_file=env_file),
+        base_url=get_env_value("DEEPSEEK_BASE_URL", env_file=env_file) or DeepSeekConfig.base_url,
+        model=get_env_value("DEEPSEEK_MODEL", env_file=env_file) or DeepSeekConfig.model,
+        max_tokens=get_int_env("DEEPSEEK_MAX_TOKENS", DeepSeekConfig.max_tokens, env_file=env_file),
+        temperature=get_float_env(
+            "DEEPSEEK_TEMPERATURE",
+            DeepSeekConfig.temperature,
+            env_file=env_file,
+        ),
+        top_p=get_float_env("DEEPSEEK_TOP_P", DeepSeekConfig.top_p, env_file=env_file),
+        trust_env_proxy=get_bool_env(
+            "DEEPSEEK_TRUST_ENV_PROXY",
+            DeepSeekConfig.trust_env_proxy,
+            env_file=env_file,
+        ),
     )

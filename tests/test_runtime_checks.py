@@ -35,6 +35,17 @@ def test_check_runtime_accepts_deepseek_key_and_database(tmp_path, monkeypatch):
     assert status["missing_database_paths"] == []
 
 
+def test_deepseek_key_can_be_loaded_from_dotenv_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEEPSEEK_API_KEY=dotenv-key\n", encoding="utf-8")
+
+    from app.runtime_checks import get_deepseek_api_key
+
+    assert get_deepseek_api_key(env_file=env_file) == "dotenv-key"
+
+
 def test_health_endpoint_returns_runtime_status():
     client = TestClient(app)
 

@@ -36,13 +36,25 @@ conda activate chinatravel-product
 pip install -r requirements.txt
 ```
 
-DeepSeek key 从环境变量读取，优先级如下：
+配置集中写在项目根目录的 `.env` 中。先复制示例文件：
 
 ```bash
-export DEEPSEEK_API_KEY="你的 DeepSeek API Key"
-# 或兼容旧配置：
-export OPENAI_API_KEY="你的 DeepSeek API Key"
+cp .env.example .env
 ```
+
+然后编辑 `.env`，填入你的 DeepSeek API Key：
+
+```env
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MAX_TOKENS=4096
+DEEPSEEK_TEMPERATURE=0
+DEEPSEEK_TOP_P=0.00000001
+DEEPSEEK_TRUST_ENV_PROXY=false
+```
+
+后端启动时会自动读取项目根目录的 `.env`。如果你已经在 shell 中设置了 `DEEPSEEK_API_KEY` 或兼容旧配置的 `OPENAI_API_KEY`，shell 环境变量优先，不会被 `.env` 覆盖。真实 `.env` 已在 `.gitignore` 中，不会提交到仓库。
 
 ## 旅行数据库
 
@@ -176,7 +188,7 @@ tests/        产品化测试
 - 真实链路压测：目前已经完成依赖、数据库和 API 健康检查；还需要用多组真实旅行需求评估 DeepSeek 调用耗时、失败率和行程质量。
 - 请求超时与取消：`/api/plan` 目前同步等待 agent 结果，后续应加入超时控制、任务队列或异步任务状态查询。
 - 前端体验增强：当前页面展示 JSON 和基础 itinerary 卡片，后续可增加费用汇总、时间轴、交通段折叠、错误修复提示。
-- 配置管理：目前从环境变量读取 key，后续可增加 `.env.example`、部署配置说明和生产环境密钥管理。
+- 生产配置管理：当前本地开发使用 `.env`，后续可增加部署平台密钥管理、环境分层配置和配置校验命令。
 - 日志与观测：需要结构化记录请求、耗时、token 统计、失败原因，便于后续优化 agent。
 - Agent 策略扩展：当前产品入口固定 `LLMNeSy + deepseek`，保留的其他 agent 还没有暴露为可选策略。
 - 部署方案：还未提供 Dockerfile、反向代理配置、生产启动脚本或 CI 流程。
