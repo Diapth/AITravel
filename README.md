@@ -4,16 +4,33 @@ ChinaTravel Planner 是一个面向产品使用的中国旅行规划应用。用
 
 本仓库保留 `chinatravel/agent/` 下的 agent 代码，方便后续继续参考和升级。产品入口只暴露 `LLMNeSy + deepseek`。
 
-## 功能
+## 当前功能
 
 - 静态 HTML/CSS/JS 前端，访问 FastAPI 根路径即可使用。
 - `POST /api/plan` 生成 JSON 行程规划。
 - `GET /api/health` 检查 DeepSeek key 和本地旅行数据库状态。
 - 支持自然语言输入与可选结构化字段组合。
 
+## 技术栈
+
+- 后端：FastAPI、Pydantic、Uvicorn。
+- 前端：原生 HTML、CSS、JavaScript，无构建步骤。
+- LLM：DeepSeek API，使用 OpenAI SDK 兼容接口调用。
+- Agent：保留原项目 `LLMNeSy` 规划链路，产品默认调用 `LLMNeSy + deepseek`。
+- 数据环境：`WorldEnv` 读取本地 CSV/JSON 旅行数据库，覆盖景点、餐厅、住宿、城际交通、市内交通和 POI。
+- 约束校验：`chinatravel/symbol_verification/`，用于 `LLMNeSy` 运行时检查行程约束。
+- 测试：pytest、FastAPI TestClient。
+
 ## 环境准备
 
-建议使用 Python 3.10+。
+建议使用 conda 创建独立环境。推荐方式：
+
+```bash
+conda env create -f environment.yml
+conda activate chinatravel-product
+```
+
+如果只想在已有 Python 环境中安装运行依赖：
 
 ```bash
 pip install -r requirements.txt
@@ -48,19 +65,33 @@ chinatravel/environment/database/poi
 
 数据库目录在 `.gitignore` 中，不会提交到仓库。
 
-## 启动
+## 运行项目
+
+1. 确认健康检查依赖齐全：
+
+```bash
+python -c "from app.runtime_checks import check_runtime; print(check_runtime())"
+```
+
+期望看到：
+
+```python
+{'ok': True, 'deepseek_key_configured': True, 'database_ready': True, 'missing_database_paths': []}
+```
+
+2. 启动 FastAPI：
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-浏览器打开：
+3. 浏览器打开：
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-健康检查：
+4. 也可以直接请求健康检查：
 
 ```bash
 curl http://127.0.0.1:8000/api/health
@@ -116,8 +147,10 @@ curl http://127.0.0.1:8000/api/health
 
 ## 测试
 
+使用 conda 环境时建议显式用当前环境的 Python 跑 pytest，避免系统或用户目录里的 `pytest` 抢占命令：
+
 ```bash
-pytest
+python -m pytest -q
 ```
 
 当前测试覆盖：
@@ -137,3 +170,13 @@ tests/        产品化测试
 ```
 
 `chinatravel/symbol_verification/` 是 `LLMNeSy` 运行时依赖，不是可删除的评测壳子。
+
+## 还没做的事
+
+- 真实链路压测：目前已经完成依赖、数据库和 API 健康检查；还需要用多组真实旅行需求评估 DeepSeek 调用耗时、失败率和行程质量。
+- 请求超时与取消：`/api/plan` 目前同步等待 agent 结果，后续应加入超时控制、任务队列或异步任务状态查询。
+- 前端体验增强：当前页面展示 JSON 和基础 itinerary 卡片，后续可增加费用汇总、时间轴、交通段折叠、错误修复提示。
+- 配置管理：目前从环境变量读取 key，后续可增加 `.env.example`、部署配置说明和生产环境密钥管理。
+- 日志与观测：需要结构化记录请求、耗时、token 统计、失败原因，便于后续优化 agent。
+- Agent 策略扩展：当前产品入口固定 `LLMNeSy + deepseek`，保留的其他 agent 还没有暴露为可选策略。
+- 部署方案：还未提供 Dockerfile、反向代理配置、生产启动脚本或 CI 流程。
