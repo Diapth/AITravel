@@ -1,0 +1,15 @@
+{
+  "name": "chinatravel",
+  "version": "1.0.0",
+  "description": "ChinaTravel Planner 是一个面向产品使用的中国旅行规划应用。用户在网页中输入自然语言旅行需求，也可以补充出发城市、目的城市、天数、人数和预算；后端通过 FastAPI 调用现有 `LLMNeSy + DeepSeek + WorldEnv` agent 体系，返回结构化 JSON 行程。",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

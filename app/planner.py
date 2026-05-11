@@ -10,6 +10,42 @@ from typing import Any
 from app.runtime_checks import PROJECT_ROOT, get_deepseek_api_key
 from app.schemas import PlanRequest
 
+try:
+    from func_timeout import FunctionTimedOut, func_timeout
+except ImportError:  # pragma: no cover - product env installs func_timeout
+    class FunctionTimedOut(TimeoutError):
+        def __init__(
+            self,
+            msg="",
+            timedOutAfter=None,
+            timedOutFunction=None,
+            timedOutArgs=None,
+            timedOutKwargs=None,
+        ):
+            super().__init__(msg)
+            self.timedOutAfter = timedOutAfter
+            self.timedOutFunction = timedOutFunction
+            self.timedOutArgs = timedOutArgs
+            self.timedOutKwargs = timedOutKwargs
+
+    def func_timeout(timeout_sec, func, args=(), kwargs=None):
+        return func(*args, **(kwargs or {}))
+
+
+DEFAULT_PLANNER_TIMEOUT_SEC = 900
+
+
+def get_planner_timeout_sec() -> int:
+    raw_value = os.getenv("CHINATRAVEL_PLANNER_TIMEOUT_SEC")
+    if not raw_value:
+        return DEFAULT_PLANNER_TIMEOUT_SEC
+
+    try:
+        timeout_sec = int(raw_value)
+    except ValueError:
+        return DEFAULT_PLANNER_TIMEOUT_SEC
+    return timeout_sec if timeout_sec > 0 else DEFAULT_PLANNER_TIMEOUT_SEC
+
 
 def build_query(request: PlanRequest) -> dict[str, Any]:
     supplements = []
@@ -85,12 +121,32 @@ class ChinaTravelPlanner:
 
         try:
             agent = self._load_agent()
-            success, plan = agent.run(
-                query,
-                load_cache=False,
-                oralce_translation=False,
-                preference_search=False,
+            timeout_sec = get_planner_timeout_sec()
+            success, plan = func_timeout(
+                timeout_sec,
+                agent.run,
+                kwargs={
+                    "query": query,
+                    "load_cache": False,
+                    "oralce_translation": False,
+                    "preference_search": False,
+                },
             )
+        except FunctionTimedOut:
+            elapsed = time.time() - started
+            return {
+                "success": False,
+                "meta": {
+                    "agent": "LLMNeSy",
+                    "llm": "deepseek",
+                    "elapsed_sec": elapsed,
+                    "timeout_sec": get_planner_timeout_sec(),
+                },
+                "error": {
+                    "code": "PLANNER_TIMEOUT",
+                    "message": "行程生成超时，请稍后重试或缩小需求范围。",
+                },
+            }
         except Exception as exc:
             return {
                 "success": False,

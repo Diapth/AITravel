@@ -2,7 +2,6 @@ import sys
 import os
 import json
 import numpy as np
-from datasets import load_dataset as hg_load_dataset
 import ast
 
 project_root_path = os.path.dirname(
@@ -11,6 +10,16 @@ project_root_path = os.path.dirname(
 
 if project_root_path not in sys.path:
     sys.path.insert(0, project_root_path)
+
+
+def _load_hf_dataset(*args, **kwargs):
+    try:
+        from datasets import load_dataset as hg_load_dataset
+    except ImportError as exc:  # pragma: no cover - optional experimental dependency
+        raise ImportError(
+            "huggingface datasets is not installed in the product runtime"
+        ) from exc
+    return hg_load_dataset(*args, **kwargs)
 
 
 class NpEncoder(json.JSONEncoder):
@@ -107,7 +116,7 @@ def load_query(args):
     #     config_name = "validation"
     # elif args.splits in ["human1000"]:
     #     config_name = "test"
-    query_data = hg_load_dataset("LAMDA-NeSy/ChinaTravel", name=config_name)[args.splits].to_list()
+    query_data = _load_hf_dataset("LAMDA-NeSy/ChinaTravel", name=config_name)[args.splits].to_list()
     
 
     for data_i in query_data:

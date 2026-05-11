@@ -8,7 +8,7 @@ from chinatravel.environment.tools.intercity_transport.apis import IntercityTran
 from chinatravel.environment.tools.transportation.apis import Transportation
 
 from chinatravel.symbol_verification.concept_func import func_dict
-from chinatravel.evaluation.utils import load_json_file
+from chinatravel.data.load_datasets import load_json_file
 
 import pandas as pd
 

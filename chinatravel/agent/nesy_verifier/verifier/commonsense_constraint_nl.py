@@ -14,7 +14,7 @@ import os
 import sys
 from tqdm import tqdm
 import math
-from chinatravel.evaluation.utils import load_json_file
+from chinatravel.data.load_datasets import load_json_file
     
 import pandas as pd
 
@@ -1064,4 +1064,3 @@ if __name__ == "__main__":
     # for item in info_list:
     #     print(item)
     # print(info_list)
-

@@ -2,7 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.planner import build_query
+from app import planner as planner_module
+from app.planner import ChinaTravelPlanner, build_query
 from app.schemas import PlanRequest
 
 
@@ -92,6 +93,31 @@ def test_plan_endpoint_uses_planner_and_returns_json(monkeypatch):
     assert response.status_code == 200
     assert response.json()["success"] is True
     assert response.json()["plan"]["itinerary"] == []
+
+
+def test_planner_returns_business_error_when_agent_times_out(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(query="当前位置上海，去苏州玩两天。")
+
+    class SlowAgent:
+        def run(self, *args, **kwargs):
+            raise AssertionError("func_timeout should wrap this call")
+
+    def fake_func_timeout(timeout_sec, func, args=(), kwargs=None):
+        raise planner_module.FunctionTimedOut(
+            "planner timed out",
+            timedOutAfter=timeout_sec,
+        )
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: SlowAgent())
+    monkeypatch.setattr(planner_module, "get_planner_timeout_sec", lambda: 7)
+    monkeypatch.setattr(planner_module, "func_timeout", fake_func_timeout)
+
+    result = planner.plan(request)
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "PLANNER_TIMEOUT"
+    assert result["meta"]["timeout_sec"] == 7
 
 
 @pytest.mark.parametrize("payload", [{"query": ""}, {"query": "   "}])

@@ -17,3 +17,5 @@ your_tpc_scores.json
 .claude
 .env
 .codex
+node_modules/
+tmp/
