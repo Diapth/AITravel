@@ -35,7 +35,9 @@ class Logger(object):
             self.terminal.write(message)
 
     def flush(self):
-        pass
+        self.log.flush()
+        if self.debug_mode:
+            self.terminal.flush()
 
     def __del__(self):
         self.log.close()

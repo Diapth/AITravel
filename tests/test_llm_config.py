@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from chinatravel.agent.llms import trace_llm_call
+from chinatravel.agent.utils import Logger
 from chinatravel.agent.llm_config import DeepSeekConfig, get_deepseek_config
 
 
@@ -74,3 +76,40 @@ def test_deepseek_config_can_read_dotenv_file(tmp_path, monkeypatch):
     assert config.temperature == 0.3
     assert config.top_p == 0.9
     assert config.trust_env_proxy is True
+
+
+def test_logger_flush_writes_messages_immediately(tmp_path):
+    log_file = tmp_path / "planner.log"
+    logger = Logger(str(log_file))
+
+    logger.write("search started\n")
+    logger.flush()
+
+    assert log_file.read_text(encoding="utf-8") == "search started\n"
+
+
+def test_llm_trace_writes_raw_response_to_file_and_console(tmp_path, monkeypatch, capfd):
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_CONSOLE", "true")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_DIR", str(tmp_path))
+    monkeypatch.setenv("CHINATRAVEL_REQUEST_ID", "web-test-request")
+
+    trace_llm_call(
+        call_id="call-test",
+        model="deepseek-chat",
+        messages=[{"role": "user", "content": "请规划上海到苏州两日游"}],
+        response="AI 原始返回：推荐先坐高铁到苏州。",
+        duration_sec=1.25,
+        input_tokens=12,
+        output_tokens=18,
+        error=None,
+    )
+
+    console_output = capfd.readouterr().out
+    trace_file = tmp_path / "web-test-request" / "llm_calls.jsonl"
+
+    assert "web-test-request" in console_output
+    assert "AI 原始返回：推荐先坐高铁到苏州。" in console_output
+    assert trace_file.exists()
+    assert "请规划上海到苏州两日游" in trace_file.read_text(encoding="utf-8")
+    assert "AI 原始返回：推荐先坐高铁到苏州。" in trace_file.read_text(encoding="utf-8")

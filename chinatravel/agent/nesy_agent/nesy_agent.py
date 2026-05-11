@@ -62,7 +62,7 @@ class NesyAgent(BaseAgent):
 
         self.memory = {}
 
-        self.TIME_CUT = 60 * 5
+        self.TIME_CUT = kwargs.get("time_cut", 60 * 5)
 
         cache_dir = kwargs.get("cache_dir", "cache/")
         if not os.path.exists(cache_dir):

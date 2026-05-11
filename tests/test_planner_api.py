@@ -30,6 +30,32 @@ def test_build_query_merges_optional_structured_fields():
     assert query["people_number"] == 2
 
 
+def test_build_query_can_use_request_id():
+    request = PlanRequest(query="请给我一个旅行规划。")
+
+    query = build_query(request, request_id="web-20260511-test")
+
+    assert query["uid"] == "web-20260511-test"
+
+
+def test_planner_timeouts_can_be_loaded_from_dotenv_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("CHINATRAVEL_PLANNER_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("CHINATRAVEL_AGENT_SEARCH_TIMEOUT_SEC", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "CHINATRAVEL_PLANNER_TIMEOUT_SEC=901",
+                "CHINATRAVEL_AGENT_SEARCH_TIMEOUT_SEC=902",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert planner_module.get_planner_timeout_sec(env_file=env_file) == 901
+    assert planner_module.get_agent_search_timeout_sec(env_file=env_file) == 902
+
+
 def test_plan_endpoint_returns_business_error_when_runtime_is_not_ready(monkeypatch):
     monkeypatch.setattr(
         "app.main.check_runtime",

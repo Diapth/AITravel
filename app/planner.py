@@ -6,9 +6,11 @@ import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from app.runtime_checks import PROJECT_ROOT, get_deepseek_api_key
 from app.schemas import PlanRequest
+from chinatravel.config import get_bool_env, get_int_env
 
 try:
     from func_timeout import FunctionTimedOut, func_timeout
@@ -33,21 +35,40 @@ except ImportError:  # pragma: no cover - product env installs func_timeout
 
 
 DEFAULT_PLANNER_TIMEOUT_SEC = 900
+DEFAULT_AGENT_SEARCH_TIMEOUT_SEC = DEFAULT_PLANNER_TIMEOUT_SEC
 
 
-def get_planner_timeout_sec() -> int:
-    raw_value = os.getenv("CHINATRAVEL_PLANNER_TIMEOUT_SEC")
-    if not raw_value:
-        return DEFAULT_PLANNER_TIMEOUT_SEC
-
-    try:
-        timeout_sec = int(raw_value)
-    except ValueError:
-        return DEFAULT_PLANNER_TIMEOUT_SEC
-    return timeout_sec if timeout_sec > 0 else DEFAULT_PLANNER_TIMEOUT_SEC
+def _positive_timeout(value: int, default: int) -> int:
+    return value if value > 0 else default
 
 
-def build_query(request: PlanRequest) -> dict[str, Any]:
+def get_planner_timeout_sec(env_file: str | Path | None = None) -> int:
+    return _positive_timeout(
+        get_int_env(
+            "CHINATRAVEL_PLANNER_TIMEOUT_SEC",
+            DEFAULT_PLANNER_TIMEOUT_SEC,
+            env_file=env_file,
+        ),
+        DEFAULT_PLANNER_TIMEOUT_SEC,
+    )
+
+
+def get_agent_search_timeout_sec(env_file: str | Path | None = None) -> int:
+    return _positive_timeout(
+        get_int_env(
+            "CHINATRAVEL_AGENT_SEARCH_TIMEOUT_SEC",
+            DEFAULT_AGENT_SEARCH_TIMEOUT_SEC,
+            env_file=env_file,
+        ),
+        DEFAULT_AGENT_SEARCH_TIMEOUT_SEC,
+    )
+
+
+def make_request_id() -> str:
+    return f"web-{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}"
+
+
+def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[str, Any]:
     supplements = []
     if request.start_city:
         supplements.append(f"出发城市{request.start_city}")
@@ -65,7 +86,7 @@ def build_query(request: PlanRequest) -> dict[str, Any]:
         nature_language = f"{nature_language}\n补充结构化需求：{'；'.join(supplements)}。"
 
     query: dict[str, Any] = {
-        "uid": "web-request",
+        "uid": request_id,
         "nature_language": nature_language,
     }
     if request.start_city:
@@ -109,34 +130,45 @@ class ChinaTravelPlanner:
             "backbone_llm": init_llm("deepseek", max_model_len=8192),
             "cache_dir": str(self.project_root / "cache"),
             "log_dir": str(self.project_root / "cache" / "LLMNeSy_DeepSeek-V3"),
-            "debug": False,
+            "debug": get_bool_env("CHINATRAVEL_AGENT_DEBUG_CONSOLE", False),
             "refine_steps": 10,
+            "time_cut": get_agent_search_timeout_sec(),
         }
         self._agent = init_agent(kwargs)
         return self._agent
 
     def plan(self, request: PlanRequest) -> dict[str, Any]:
-        query = build_query(request)
+        request_id = make_request_id()
+        query = build_query(request, request_id=request_id)
         started = time.time()
+        previous_request_id = os.environ.get("CHINATRAVEL_REQUEST_ID")
+        os.environ["CHINATRAVEL_REQUEST_ID"] = request_id
 
         try:
-            agent = self._load_agent()
-            timeout_sec = get_planner_timeout_sec()
-            success, plan = func_timeout(
-                timeout_sec,
-                agent.run,
-                kwargs={
-                    "query": query,
-                    "load_cache": False,
-                    "oralce_translation": False,
-                    "preference_search": False,
-                },
-            )
+            try:
+                agent = self._load_agent()
+                timeout_sec = get_planner_timeout_sec()
+                success, plan = func_timeout(
+                    timeout_sec,
+                    agent.run,
+                    kwargs={
+                        "query": query,
+                        "load_cache": False,
+                        "oralce_translation": False,
+                        "preference_search": False,
+                    },
+                )
+            finally:
+                if previous_request_id is None:
+                    os.environ.pop("CHINATRAVEL_REQUEST_ID", None)
+                else:
+                    os.environ["CHINATRAVEL_REQUEST_ID"] = previous_request_id
         except FunctionTimedOut:
             elapsed = time.time() - started
             return {
                 "success": False,
                 "meta": {
+                    "request_id": request_id,
                     "agent": "LLMNeSy",
                     "llm": "deepseek",
                     "elapsed_sec": elapsed,
@@ -150,6 +182,12 @@ class ChinaTravelPlanner:
         except Exception as exc:
             return {
                 "success": False,
+                "meta": {
+                    "request_id": request_id,
+                    "agent": "LLMNeSy",
+                    "llm": "deepseek",
+                    "elapsed_sec": time.time() - started,
+                },
                 "error": {
                     "code": "PLANNER_FAILED",
                     "message": str(exc),
@@ -162,6 +200,7 @@ class ChinaTravelPlanner:
                 "success": False,
                 "plan": plan,
                 "meta": {
+                    "request_id": request_id,
                     "agent": "LLMNeSy",
                     "llm": "deepseek",
                     "elapsed_sec": elapsed,
@@ -178,6 +217,7 @@ class ChinaTravelPlanner:
             "success": True,
             "plan": plan,
             "meta": {
+                "request_id": request_id,
                 "agent": "LLMNeSy",
                 "llm": "deepseek",
                 "elapsed_sec": elapsed,
