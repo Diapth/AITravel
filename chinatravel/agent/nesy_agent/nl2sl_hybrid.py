@@ -11,7 +11,7 @@ if project_path not in sys.path:
 import json
 from tqdm import tqdm
 from copy import deepcopy
-from chinatravel.agent.llms import Deepseek, GPT4o, Qwen, Mistral, GLM4Plus
+from chinatravel.agent.llms import Deepseek
 from chinatravel.symbol_verification.concept_func import func_dict
 from chinatravel.agent.nesy_agent.prompts import NL2SL_INSTRUCTION
 from chinatravel.agent.nesy_agent.ast_checker import HardLogicPyChecker
@@ -581,6 +581,6 @@ if __name__ == "__main__":
     # splits_list = ["easy_1209", "multi_cons"]
     # splits_list = ["cost", "food", "attraction", "hotel", "transport"]
     # splits_list = ["attraction"]
-    llm = Qwen()
+    llm = Deepseek()
     for splits in splits_list:
         run(splits=splits, backbone_llm=llm)

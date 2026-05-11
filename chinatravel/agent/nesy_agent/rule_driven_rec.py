@@ -380,7 +380,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from chinatravel.data.load_datasets import load_query
-    from agent.llms import Deepseek, GPT4o, GLM4Plus
+    from agent.llms import Deepseek
     from environment.world_env import WorldEnv
 
     env = WorldEnv()
@@ -395,10 +395,8 @@ if __name__ == "__main__":
 
     if args.llm == "deepseek":
         llm = Deepseek()
-    elif args.llm == "gpt-4o":
-        llm = GPT4o()
-    elif args.llm == "glm4-plus":
-        llm = GLM4Plus()
+    else:
+        raise ValueError("Product runtime only supports deepseek.")
 
     method = "RuleNeSy"
 
