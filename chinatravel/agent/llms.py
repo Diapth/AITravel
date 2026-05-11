@@ -1,13 +1,29 @@
 from abc import ABC, abstractmethod
 from openai import OpenAI
-from json_repair import repair_json
-from transformers import AutoTokenizer
-from transformers import AutoConfig
+try:
+    from json_repair import repair_json
+except ImportError:
+    def repair_json(value, ensure_ascii=False):
+        return value
+
+try:
+    from transformers import AutoTokenizer
+    from transformers import AutoConfig
+except ImportError:
+    AutoTokenizer = None
+    AutoConfig = None
 
 # from modelscope import AutoModelForCausalLM, AutoTokenizer
-import tiktoken
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
 
-from vllm import LLM, SamplingParams
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    LLM = None
+    SamplingParams = None
 import re
 import sys
 import os
@@ -70,31 +86,44 @@ class AbstractLLM(ABC):
 class Deepseek(AbstractLLM):
     def __init__(self):
         super().__init__()
+        api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
         self.llm = OpenAI(
             base_url="https://api.deepseek.com",
+            api_key=api_key,
         )
         self.path = os.path.join(
             project_root_path, "chinatravel", "local_llm", "deepseek_v3_tokenizer"
         )
         self.name = "DeepSeek-V3"
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.path)
+        if AutoTokenizer is not None and os.path.exists(self.path):
+            self.tokenizer = AutoTokenizer.from_pretrained(self.path)
+        else:
+            self.tokenizer = None
+
+    def _count_tokens(self, value):
+        if self.tokenizer is None:
+            return len(str(value))
+        return len(self.tokenizer(value)["input_ids"])
 
     def _send_request(self, messages, kwargs):
 
-        text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        input_tokens = self.tokenizer(text)["input_ids"]
+        if self.tokenizer is None:
+            text = chat_template(messages)
+        else:
+            text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        input_tokens = self._count_tokens(text)
 
-        self.input_token_count += len(input_tokens)
-        self.input_token_maxx = max(self.input_token_maxx, len(input_tokens))
+        self.input_token_count += input_tokens
+        self.input_token_maxx = max(self.input_token_maxx, input_tokens)
         
         res_str = (
             self.llm.chat.completions.create(messages=messages, **kwargs)
             .choices[0]
             .message.content
         )
-        output_tokens = self.tokenizer(res_str)["input_ids"]
-        self.output_token_count += len(output_tokens)
+        output_tokens = self._count_tokens(res_str)
+        self.output_token_count += output_tokens
         
         res_str = res_str.strip()
         return res_str
@@ -160,6 +189,8 @@ class GPT4o(AbstractLLM):
         super().__init__()
         self.llm = OpenAI()
         self.name = "GPT4o"
+        if tiktoken is None:
+            raise ImportError("tiktoken is required for GPT4o.")
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
 
@@ -210,6 +241,8 @@ class GPT4o(AbstractLLM):
 class Qwen(AbstractLLM):
     def __init__(self, model_name, max_model_len=None):
         super().__init__()
+        if AutoTokenizer is None or AutoConfig is None or LLM is None or SamplingParams is None:
+            raise ImportError("transformers and vllm are required for Qwen.")
         self.path = os.path.join(
             project_root_path, "chinatravel", "local_llm", model_name
         )
@@ -329,6 +362,8 @@ class Qwen(AbstractLLM):
 class Mistral(AbstractLLM):
     def __init__(self, max_model_len=None):
         super().__init__()
+        if AutoTokenizer is None or AutoConfig is None or LLM is None or SamplingParams is None:
+            raise ImportError("transformers and vllm are required for Mistral.")
         self.path = os.path.join(
             project_root_path, "chinatravel", "local_llm", "Mistral-7B-Instruct-v0.3",
         )
@@ -400,6 +435,8 @@ class Mistral(AbstractLLM):
 class Llama(AbstractLLM):
     def __init__(self, model_name):
         super().__init__()
+        if AutoTokenizer is None or LLM is None or SamplingParams is None:
+            raise ImportError("transformers and vllm are required for Llama.")
 
 
         Llama_supported = ["Llama3-3B", "Llama3-8B"]

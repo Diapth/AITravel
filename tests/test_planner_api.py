@@ -1,0 +1,103 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.planner import build_query
+from app.schemas import PlanRequest
+
+
+def test_build_query_merges_optional_structured_fields():
+    request = PlanRequest(
+        query="请给我一个旅行规划。",
+        start_city="上海",
+        target_city="苏州",
+        days=2,
+        people_number=2,
+        budget=1300,
+    )
+
+    query = build_query(request)
+
+    assert query["uid"] == "web-request"
+    assert query["nature_language"] == (
+        "请给我一个旅行规划。\n"
+        "补充结构化需求：出发城市上海；目标城市苏州；行程天数2天；出行人数2人；预算1300元。"
+    )
+    assert query["start_city"] == "上海"
+    assert query["target_city"] == "苏州"
+    assert query["days"] == 2
+    assert query["people_number"] == 2
+
+
+def test_plan_endpoint_returns_business_error_when_runtime_is_not_ready(monkeypatch):
+    monkeypatch.setattr(
+        "app.main.check_runtime",
+        lambda: {
+            "ok": False,
+            "deepseek_key_configured": False,
+            "database_ready": False,
+            "missing_database_paths": ["chinatravel/environment/database/poi"],
+        },
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/plan", json={"query": "当前位置上海，去苏州玩两天。"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": False,
+        "error": {
+            "code": "RUNTIME_NOT_READY",
+            "message": "DeepSeek key 或旅行数据库未配置完成。",
+            "details": {
+                "ok": False,
+                "deepseek_key_configured": False,
+                "database_ready": False,
+                "missing_database_paths": ["chinatravel/environment/database/poi"],
+            },
+        },
+    }
+
+
+def test_plan_endpoint_uses_planner_and_returns_json(monkeypatch):
+    monkeypatch.setattr(
+        "app.main.check_runtime",
+        lambda: {
+            "ok": True,
+            "deepseek_key_configured": True,
+            "database_ready": True,
+            "missing_database_paths": [],
+        },
+    )
+
+    class FakePlanner:
+        def plan(self, request):
+            assert request.query == "当前位置上海，去苏州玩两天。"
+            return {
+                "success": True,
+                "plan": {
+                    "people_number": 1,
+                    "start_city": "上海",
+                    "target_city": "苏州",
+                    "itinerary": [],
+                },
+                "meta": {"agent": "LLMNeSy", "llm": "deepseek", "elapsed_sec": 0.1},
+            }
+
+    monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
+    client = TestClient(app)
+
+    response = client.post("/api/plan", json={"query": "当前位置上海，去苏州玩两天。"})
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["plan"]["itinerary"] == []
+
+
+@pytest.mark.parametrize("payload", [{"query": ""}, {"query": "   "}])
+def test_plan_endpoint_rejects_blank_query(payload):
+    client = TestClient(app)
+
+    response = client.post("/api/plan", json=payload)
+
+    assert response.status_code == 422
