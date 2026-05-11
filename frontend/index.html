@@ -8,68 +8,93 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="planner-panel" aria-labelledby="app-title">
-        <div class="brand-row">
+      <header class="app-header">
+        <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true">中</span>
           <div>
             <p class="eyebrow">ChinaTravel Planner</p>
-            <h1 id="app-title">把旅行需求变成可执行行程</h1>
+            <h1>把旅行需求变成可执行行程</h1>
           </div>
         </div>
-
-        <form id="plan-form" class="plan-form">
-          <label class="field field-wide">
-            <span>旅行需求</span>
-            <textarea
-              id="query"
-              name="query"
-              rows="7"
-              required
-              placeholder="例如：当前位置上海。我和女朋友想去苏州玩两天，预算1300元，希望酒店每晚不超过500元，请给我一个旅行规划。"
-            ></textarea>
-          </label>
-
-          <div class="field-grid">
-            <label class="field">
-              <span>出发城市</span>
-              <input id="start_city" name="start_city" autocomplete="off" placeholder="上海" />
-            </label>
-            <label class="field">
-              <span>目的城市</span>
-              <input id="target_city" name="target_city" autocomplete="off" placeholder="苏州" />
-            </label>
-            <label class="field">
-              <span>天数</span>
-              <input id="days" name="days" type="number" min="1" max="30" placeholder="2" />
-            </label>
-            <label class="field">
-              <span>人数</span>
-              <input id="people_number" name="people_number" type="number" min="1" max="50" placeholder="2" />
-            </label>
-            <label class="field">
-              <span>预算</span>
-              <input id="budget" name="budget" type="number" min="1" placeholder="1300" />
-            </label>
-          </div>
-
-          <button id="submit-button" class="primary-action" type="submit">
-            <span>生成行程</span>
-          </button>
-        </form>
-      </section>
-
-      <section class="result-panel" aria-live="polite">
-        <div class="result-header">
-          <div>
-            <p class="eyebrow">Output</p>
-            <h2>规划结果</h2>
-          </div>
-          <span id="status-pill" class="status-pill">待输入</span>
+        <div class="header-meta">
+          <span class="status-chip">FastAPI</span>
+          <span class="status-chip">DeepSeek</span>
+          <span class="status-chip">LLMNeSy</span>
         </div>
+      </header>
 
-        <div id="message" class="message is-muted">提交旅行需求后，JSON 行程会显示在这里。</div>
-        <div id="itinerary" class="itinerary"></div>
-        <pre id="json-output" class="json-output" hidden></pre>
+      <section class="workspace-grid">
+        <section class="composer-card" aria-labelledby="composer-title">
+          <div class="section-topline">
+            <p class="eyebrow">Input</p>
+            <h2 id="composer-title">旅行需求</h2>
+          </div>
+
+          <form id="plan-form" class="plan-form">
+            <label class="field field-wide">
+              <span>自然语言需求</span>
+              <textarea
+                id="query"
+                name="query"
+                rows="7"
+                required
+                placeholder="例如：当前位置上海。我和女朋友想去苏州玩两天，预算1300元，希望酒店每晚不超过500元，请给我一个旅行规划。"
+              ></textarea>
+            </label>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>出发城市</span>
+                <input id="start_city" name="start_city" autocomplete="off" placeholder="上海" />
+              </label>
+              <label class="field">
+                <span>目的城市</span>
+                <input id="target_city" name="target_city" autocomplete="off" placeholder="苏州" />
+              </label>
+              <label class="field">
+                <span>天数</span>
+                <input id="days" name="days" type="number" min="1" max="30" placeholder="2" />
+              </label>
+              <label class="field">
+                <span>人数</span>
+                <input id="people_number" name="people_number" type="number" min="1" max="50" placeholder="2" />
+              </label>
+              <label class="field field-span-2">
+                <span>预算</span>
+                <input id="budget" name="budget" type="number" min="1" placeholder="1300" />
+              </label>
+            </div>
+
+            <button id="submit-button" class="primary-action" type="submit">
+              <span>生成行程</span>
+            </button>
+          </form>
+        </section>
+
+        <section class="result-workspace" aria-live="polite">
+          <div class="section-topline result-topline">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>规划结果</h2>
+            </div>
+            <span id="status-pill" class="status-pill">待输入</span>
+          </div>
+
+          <div id="summary-strip" class="summary-strip" hidden></div>
+          <div id="message" class="message is-muted">提交旅行需求后，结果会显示在这里。</div>
+
+          <div class="result-stack">
+            <div>
+              <div class="stack-label">行程卡片</div>
+              <div id="itinerary" class="itinerary"></div>
+            </div>
+
+            <div>
+              <div class="stack-label">JSON 原文</div>
+              <pre id="json-output" class="json-output" hidden></pre>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
 

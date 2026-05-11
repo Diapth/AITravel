@@ -1,6 +1,7 @@
 const form = document.querySelector("#plan-form");
 const submitButton = document.querySelector("#submit-button");
 const statusPill = document.querySelector("#status-pill");
+const summaryStrip = document.querySelector("#summary-strip");
 const message = document.querySelector("#message");
 const itinerary = document.querySelector("#itinerary");
 const jsonOutput = document.querySelector("#json-output");
@@ -26,9 +27,52 @@ const showMessage = (text, mode = "is-muted") => {
   message.className = `message ${mode}`.trim();
 };
 
+const setSummary = (items = []) => {
+  summaryStrip.innerHTML = "";
+  if (!items.length) {
+    summaryStrip.hidden = true;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  items.forEach(({ label, value }) => {
+    if (value === undefined || value === null || value === "") return;
+
+    const item = document.createElement("div");
+    item.className = "summary-item";
+
+    const title = document.createElement("p");
+    title.className = "summary-label";
+    title.textContent = label;
+
+    const content = document.createElement("p");
+    content.className = "summary-value";
+    content.textContent = value;
+
+    item.append(title, content);
+    fragment.append(item);
+  });
+
+  summaryStrip.append(fragment);
+  summaryStrip.hidden = !summaryStrip.children.length;
+};
+
 const renderJson = (payload) => {
   jsonOutput.hidden = false;
   jsonOutput.textContent = JSON.stringify(payload, null, 2);
+};
+
+const summarizePlan = (plan, fallback) => {
+  const days = plan?.days || fallback.days;
+  const people = plan?.people_number || fallback.people_number;
+  const budget = plan?.budget || fallback.budget;
+  return [
+    { label: "From", value: plan?.start_city || fallback.start_city },
+    { label: "To", value: plan?.target_city || fallback.target_city },
+    { label: "Days", value: days ? `${days} 天` : undefined },
+    { label: "People", value: people ? `${people} 人` : undefined },
+    { label: "Budget", value: budget ? `¥${budget}` : undefined },
+  ];
 };
 
 const renderItinerary = (plan) => {
@@ -97,8 +141,15 @@ form.addEventListener("submit", async (event) => {
   const payload = buildPayload();
 
   submitButton.disabled = true;
-  setStatus("生成中");
-  showMessage("正在调用 DeepSeek 和本地旅行数据生成行程...");
+  setStatus("生成中", "is-loading");
+  showMessage("正在调用 DeepSeek 和本地旅行数据生成行程...", "is-loading");
+  setSummary([
+    { label: "From", value: payload.start_city },
+    { label: "To", value: payload.target_city },
+    { label: "Days", value: payload.days ? `${payload.days} 天` : undefined },
+    { label: "People", value: payload.people_number ? `${payload.people_number} 人` : undefined },
+    { label: "Budget", value: payload.budget ? `¥${payload.budget}` : undefined },
+  ]);
   itinerary.innerHTML = "";
   jsonOutput.hidden = true;
 
@@ -114,11 +165,13 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok || data.success === false) {
       setStatus("失败", "is-error");
       showMessage(data.error?.message || "生成失败，请检查输入和后端配置。", "is-error");
+      setSummary(summarizePlan(data.plan, payload));
       return;
     }
 
     setStatus("完成", "is-ok");
     showMessage("行程已生成。下方是可读行程卡片，完整 JSON 保留在末尾。", "is-muted");
+    setSummary(summarizePlan(data.plan, payload));
     renderItinerary(data.plan);
   } catch (error) {
     setStatus("失败", "is-error");
