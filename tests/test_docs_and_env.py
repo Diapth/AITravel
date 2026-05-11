@@ -16,6 +16,13 @@ def test_runtime_http_dependencies_are_pinned():
     assert "urllib3==" in text
 
 
+def test_yaml_runtime_dependency_uses_pyyaml_package_name():
+    lines = Path("requirements.txt").read_text(encoding="utf-8").splitlines()
+
+    assert "PyYAML==6.0.3" in lines
+    assert "yaml" not in lines
+
+
 def test_readme_covers_run_stack_and_todo():
     text = Path("README.md").read_text(encoding="utf-8")
 
