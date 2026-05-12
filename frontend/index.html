@@ -4,16 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ChinaTravel 行程规划</title>
+    <meta
+      name="description"
+      content="ChinaTravel Planner 旅行行程规划工作台"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true">中</span>
+          <span class="brand-mark" aria-hidden="true">CT</span>
           <div>
             <p class="eyebrow">ChinaTravel Planner</p>
-            <h1>把旅行需求变成可执行行程</h1>
+            <h1>旅行规划工作台</h1>
           </div>
         </div>
         <div class="header-meta">
@@ -26,8 +30,11 @@
       <section class="workspace-grid">
         <section class="composer-card" aria-labelledby="composer-title">
           <div class="section-topline">
-            <p class="eyebrow">Input</p>
-            <h2 id="composer-title">旅行需求</h2>
+            <div>
+              <p class="eyebrow">Input</p>
+              <h2 id="composer-title">旅行需求</h2>
+            </div>
+            <span class="required-note">query 必填</span>
           </div>
 
           <form id="plan-form" class="plan-form">
@@ -38,9 +45,50 @@
                 name="query"
                 rows="7"
                 required
+                aria-describedby="query-help"
                 placeholder="例如：当前位置上海。我和女朋友想去苏州玩两天，预算1300元，希望酒店每晚不超过500元，请给我一个旅行规划。"
               ></textarea>
+              <small id="query-help">可选字段会合并进需求，帮助模型稳定解析约束。</small>
             </label>
+
+            <div class="sample-row" aria-label="快捷示例">
+              <button
+                class="sample-button"
+                type="button"
+                data-query="当前位置上海。我和女朋友想去苏州玩两天，预算1300元，请给我一个旅行规划。"
+                data-start-city="上海"
+                data-target-city="苏州"
+                data-days="2"
+                data-people-number="2"
+                data-budget="1300"
+              >
+                上海到苏州
+              </button>
+              <button
+                class="sample-button"
+                type="button"
+                data-query="当前位置杭州。三个人去南京玩三天，想兼顾历史景点和本地美食，总预算2500元。"
+                data-start-city="杭州"
+                data-target-city="南京"
+                data-days="3"
+                data-people-number="3"
+                data-budget="2500"
+              >
+                杭州到南京
+              </button>
+              <button
+                class="sample-button"
+                type="button"
+                data-query="当前位置广州。两个人去厦门玩四天，希望节奏轻松，预算4000元。"
+                data-start-city="广州"
+                data-target-city="厦门"
+                data-days="4"
+                data-people-number="2"
+                data-budget="4000"
+              >
+                广州到厦门
+              </button>
+            </div>
 
             <div class="field-grid">
               <label class="field">
@@ -66,6 +114,7 @@
             </div>
 
             <button id="submit-button" class="primary-action" type="submit">
+              <span class="button-spinner" aria-hidden="true"></span>
               <span>生成行程</span>
             </button>
           </form>
@@ -77,7 +126,7 @@
               <p class="eyebrow">Output</p>
               <h2>规划结果</h2>
             </div>
-            <span id="status-pill" class="status-pill">待输入</span>
+            <span id="status-pill" class="status-pill" role="status">待输入</span>
           </div>
 
           <div id="summary-strip" class="summary-strip" hidden></div>
@@ -86,7 +135,7 @@
           <div class="result-stack">
             <div>
               <div class="stack-label">行程卡片</div>
-              <div id="itinerary" class="itinerary"></div>
+              <div id="itinerary" class="itinerary" aria-label="结构化行程"></div>
             </div>
 
             <div>

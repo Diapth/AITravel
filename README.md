@@ -52,9 +52,12 @@ DEEPSEEK_MAX_TOKENS=4096
 DEEPSEEK_TEMPERATURE=0
 DEEPSEEK_TOP_P=0.00000001
 DEEPSEEK_TRUST_ENV_PROXY=false
+DEEPSEEK_DISABLE_THINKING=false
 ```
 
 后端启动时会自动读取项目根目录的 `.env`。如果你已经在 shell 中设置了 `DEEPSEEK_API_KEY` 或兼容旧配置的 `OPENAI_API_KEY`，shell 环境变量优先，不会被 `.env` 覆盖。真实 `.env` 已在 `.gitignore` 中，不会提交到仓库。
+
+如果你使用支持思考模式的 DeepSeek 模型，并希望强制关闭思考输出，可以把 `DEEPSEEK_DISABLE_THINKING=true`。当前默认的 `deepseek-chat` 本身就是非思考模式兼容模型，通常保持 `false` 即可。
 
 ## 旅行数据库
 
@@ -159,6 +162,34 @@ curl http://127.0.0.1:8000/api/health
     "message": "DeepSeek key 或旅行数据库未配置完成。"
   }
 }
+```
+
+## 日志
+
+每次 `POST /api/plan` 都会按 `request_id` 保存完整链路日志，默认目录是：
+
+```text
+logs/<request_id>/
+```
+
+其中包含：
+
+- `api_request.json`：接口收到的完整输入、生成的 `request_id`、以及合并后的 planner query。
+- `api_response.json`：接口返回给前端的完整 JSON 结果，包含成功或失败响应。
+- `llm_calls.jsonl`：中间 DeepSeek 调用日志，每一行记录一次模型调用的 prompt messages、原始 response、耗时、token 估算和错误信息。
+
+LLMNeSy agent 运行时的 stdout/stderr 日志会保存在：
+
+```text
+logs/LLMNeSy_DeepSeek-V3/<request_id>.log
+logs/LLMNeSy_DeepSeek-V3/<request_id>.error
+```
+
+相关配置在 `.env` 中：
+
+```env
+CHINATRAVEL_LLM_TRACE_ENABLED=true
+CHINATRAVEL_LLM_TRACE_DIR=logs
 ```
 
 ## 测试

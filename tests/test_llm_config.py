@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from chinatravel.agent import llms as llms_module
 from chinatravel.agent.llms import trace_llm_call
 from chinatravel.agent.utils import Logger
 from chinatravel.agent.llm_config import DeepSeekConfig, get_deepseek_config
@@ -16,6 +17,7 @@ def test_deepseek_config_reads_environment(monkeypatch):
     assert config.model == "deepseek-chat"
     assert config.max_tokens == 4096
     assert config.trust_env_proxy is False
+    assert config.disable_thinking is False
 
 
 def test_llms_module_no_longer_imports_vllm():
@@ -42,6 +44,14 @@ def test_deepseek_config_builds_request_kwargs():
     }
 
 
+def test_deepseek_config_can_disable_thinking():
+    config = DeepSeekConfig(api_key="key", disable_thinking=True)
+
+    assert config.request_kwargs(one_line=False, json_mode=False)["extra_body"] == {
+        "thinking": {"type": "disabled"}
+    }
+
+
 def test_deepseek_config_can_enable_system_proxy(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_TRUST_ENV_PROXY", "true")
 
@@ -62,6 +72,7 @@ def test_deepseek_config_can_read_dotenv_file(tmp_path, monkeypatch):
                 "DEEPSEEK_TEMPERATURE=0.3",
                 "DEEPSEEK_TOP_P=0.9",
                 "DEEPSEEK_TRUST_ENV_PROXY=true",
+                "DEEPSEEK_DISABLE_THINKING=true",
             ]
         ),
         encoding="utf-8",
@@ -76,6 +87,7 @@ def test_deepseek_config_can_read_dotenv_file(tmp_path, monkeypatch):
     assert config.temperature == 0.3
     assert config.top_p == 0.9
     assert config.trust_env_proxy is True
+    assert config.disable_thinking is True
 
 
 def test_logger_flush_writes_messages_immediately(tmp_path):
@@ -113,3 +125,25 @@ def test_llm_trace_writes_raw_response_to_file_and_console(tmp_path, monkeypatch
     assert trace_file.exists()
     assert "请规划上海到苏州两日游" in trace_file.read_text(encoding="utf-8")
     assert "AI 原始返回：推荐先坐高铁到苏州。" in trace_file.read_text(encoding="utf-8")
+
+
+def test_llm_trace_defaults_to_logs_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(llms_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_CONSOLE", "false")
+    monkeypatch.delenv("CHINATRAVEL_LLM_TRACE_DIR", raising=False)
+    monkeypatch.setenv("CHINATRAVEL_REQUEST_ID", "web-default-log")
+
+    trace_llm_call(
+        call_id="call-default",
+        model="deepseek-chat",
+        messages=[{"role": "user", "content": "test"}],
+        response="ok",
+        duration_sec=0.1,
+        input_tokens=1,
+        output_tokens=1,
+        error=None,
+    )
+
+    trace_file = tmp_path / "logs" / "web-default-log" / "llm_calls.jsonl"
+    assert trace_file.exists()

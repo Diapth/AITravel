@@ -12,6 +12,11 @@ PRODUCT_ENV_VARS = (
     "DEEPSEEK_TEMPERATURE",
     "DEEPSEEK_TOP_P",
     "DEEPSEEK_TRUST_ENV_PROXY",
+    "DEEPSEEK_DISABLE_THINKING",
+    "CHINATRAVEL_LLM_TRACE_ENABLED",
+    "CHINATRAVEL_LLM_TRACE_CONSOLE",
+    "CHINATRAVEL_LLM_TRACE_CONSOLE_PROMPTS",
+    "CHINATRAVEL_LLM_TRACE_DIR",
 )
 
 
@@ -19,6 +24,7 @@ PRODUCT_ENV_VARS = (
 def isolate_product_env(monkeypatch, tmp_path):
     for name in PRODUCT_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "false")
 
     monkeypatch.setattr(
         "chinatravel.config.DEFAULT_ENV_FILE",

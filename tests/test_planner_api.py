@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -144,6 +148,80 @@ def test_planner_returns_business_error_when_agent_times_out(monkeypatch):
     assert result["success"] is False
     assert result["error"]["code"] == "PLANNER_TIMEOUT"
     assert result["meta"]["timeout_sec"] == 7
+
+
+def test_planner_serializes_numpy_plan_and_writes_request_trace(tmp_path, monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(query="当前位置上海，去苏州玩两天。")
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return True, {
+                "people_number": np.int64(2),
+                "score": np.float64(0.95),
+                "route": np.array(["上海", "苏州"]),
+            }
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "make_request_id", lambda: "web-test-trace")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_DIR", str(tmp_path))
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    assert result["plan"] == {
+        "people_number": 2,
+        "score": 0.95,
+        "route": ["上海", "苏州"],
+    }
+
+    trace_dir = tmp_path / "web-test-trace"
+    request_trace = json.loads((trace_dir / "api_request.json").read_text(encoding="utf-8"))
+    response_trace = json.loads((trace_dir / "api_response.json").read_text(encoding="utf-8"))
+    assert request_trace["request"]["query"] == "当前位置上海，去苏州玩两天。"
+    assert response_trace["plan"]["route"] == ["上海", "苏州"]
+
+
+def test_structured_request_uses_success_fallback_and_writes_trace(tmp_path, monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="当前位置上海。我和女朋友想去苏州玩两天，预算1300元，请给我一个旅行规划。",
+        start_city="上海",
+        target_city="苏州",
+        days=2,
+        people_number=2,
+        budget=1300,
+    )
+
+    monkeypatch.setattr(planner_module, "make_request_id", lambda: "web-fast-success")
+    monkeypatch.setattr(
+        planner,
+        "_add_fallback_llm_summary",
+        lambda req, plan: plan.update({"llm_summary": "预算满足。"}),
+    )
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_DIR", str(tmp_path))
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    assert result["meta"]["fallback"] is True
+    assert result["plan"]["start_city"] == "上海"
+    assert result["plan"]["target_city"] == "苏州"
+    assert result["plan"]["total_cost"] <= 1300
+    assert (tmp_path / "web-fast-success" / "fallback_plan.json").exists()
+    assert (tmp_path / "web-fast-success" / "api_response.json").exists()
+
+
+def test_request_trace_defaults_to_logs_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.delenv("CHINATRAVEL_LLM_TRACE_DIR", raising=False)
+
+    trace_dir = planner_module.get_request_trace_dir("web-default-log")
+
+    assert trace_dir.resolve() == tmp_path / "logs" / "web-default-log"
+    assert Path(tmp_path / "logs" / "web-default-log").exists()
 
 
 @pytest.mark.parametrize("payload", [{"query": ""}, {"query": "   "}])

@@ -24,7 +24,10 @@ except ImportError:  # pragma: no cover
     AutoTokenizer = None
 
 from chinatravel.agent.llm_config import DeepSeekConfig, get_deepseek_config
-from chinatravel.config import get_bool_env, get_env_value
+from chinatravel.config import PROJECT_ROOT, get_bool_env, get_env_value
+
+
+DEFAULT_TRACE_DIR = "logs"
 
 
 def chat_template(messages):
@@ -50,7 +53,9 @@ def trace_llm_call(
         return
 
     request_id = os.getenv("CHINATRAVEL_REQUEST_ID") or "unknown-request"
-    trace_root = Path(get_env_value("CHINATRAVEL_LLM_TRACE_DIR") or "cache/traces")
+    trace_root = Path(get_env_value("CHINATRAVEL_LLM_TRACE_DIR") or DEFAULT_TRACE_DIR)
+    if not trace_root.is_absolute():
+        trace_root = PROJECT_ROOT / trace_root
     trace_dir = trace_root / request_id
     trace_dir.mkdir(parents=True, exist_ok=True)
 

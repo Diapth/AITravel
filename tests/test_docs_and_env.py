@@ -38,4 +38,9 @@ def test_dotenv_example_documents_deepseek_configuration():
 
     assert "DEEPSEEK_API_KEY=" in text
     assert "DEEPSEEK_BASE_URL=https://api.deepseek.com" in text
+    assert "DEEPSEEK_DISABLE_THINKING=false" in text
+    assert "CHINATRAVEL_LLM_TRACE_DIR=logs" in text
+    assert "api_request.json" in readme
+    assert "api_response.json" in readme
+    assert "llm_calls.jsonl" in readme
     assert "cp .env.example .env" in readme

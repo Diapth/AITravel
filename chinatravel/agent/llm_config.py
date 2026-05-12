@@ -15,6 +15,7 @@ class DeepSeekConfig:
     temperature: float = 0
     top_p: float = 0.00000001
     trust_env_proxy: bool = False
+    disable_thinking: bool = False
 
     def request_kwargs(self, one_line: bool, json_mode: bool) -> dict:
         kwargs = {
@@ -27,6 +28,8 @@ class DeepSeekConfig:
             kwargs["stop"] = ["\n"]
         elif json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if self.disable_thinking:
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         return kwargs
 
 
@@ -45,6 +48,11 @@ def get_deepseek_config(env_file: str | Path | None = None) -> DeepSeekConfig:
         trust_env_proxy=get_bool_env(
             "DEEPSEEK_TRUST_ENV_PROXY",
             DeepSeekConfig.trust_env_proxy,
+            env_file=env_file,
+        ),
+        disable_thinking=get_bool_env(
+            "DEEPSEEK_DISABLE_THINKING",
+            DeepSeekConfig.disable_thinking,
             env_file=env_file,
         ),
     )

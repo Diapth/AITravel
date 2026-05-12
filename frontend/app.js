@@ -5,6 +5,15 @@ const summaryStrip = document.querySelector("#summary-strip");
 const message = document.querySelector("#message");
 const itinerary = document.querySelector("#itinerary");
 const jsonOutput = document.querySelector("#json-output");
+const sampleButtons = document.querySelectorAll(".sample-button");
+const fields = {
+  query: document.querySelector("#query"),
+  start_city: document.querySelector("#start_city"),
+  target_city: document.querySelector("#target_city"),
+  days: document.querySelector("#days"),
+  people_number: document.querySelector("#people_number"),
+  budget: document.querySelector("#budget"),
+};
 
 const optionalNumber = (formData, key) => {
   const value = formData.get(key);
@@ -20,6 +29,11 @@ const optionalText = (formData, key) => {
 const setStatus = (label, mode = "") => {
   statusPill.textContent = label;
   statusPill.className = `status-pill ${mode}`.trim();
+};
+
+const setLoading = (isLoading) => {
+  submitButton.disabled = isLoading;
+  submitButton.dataset.loading = String(isLoading);
 };
 
 const showMessage = (text, mode = "is-muted") => {
@@ -67,12 +81,28 @@ const summarizePlan = (plan, fallback) => {
   const people = plan?.people_number || fallback.people_number;
   const budget = plan?.budget || fallback.budget;
   return [
-    { label: "From", value: plan?.start_city || fallback.start_city },
-    { label: "To", value: plan?.target_city || fallback.target_city },
-    { label: "Days", value: days ? `${days} 天` : undefined },
-    { label: "People", value: people ? `${people} 人` : undefined },
-    { label: "Budget", value: budget ? `¥${budget}` : undefined },
+    { label: "出发", value: plan?.start_city || fallback.start_city },
+    { label: "目的地", value: plan?.target_city || fallback.target_city },
+    { label: "天数", value: days ? `${days} 天` : undefined },
+    { label: "人数", value: people ? `${people} 人` : undefined },
+    { label: "预算", value: budget ? `¥${budget}` : undefined },
   ];
+};
+
+const formatTime = (start, end) => {
+  if (!start && !end) return "时间待定";
+  if (start && end) return `${start} - ${end}`;
+  return start || end;
+};
+
+const formatActivityMeta = (activity) => {
+  const parts = [];
+  if (activity.type) parts.push(activity.type);
+  if (activity.cost !== undefined && activity.cost !== null && activity.cost !== "") {
+    parts.push(`¥${activity.cost}`);
+  }
+  if (activity.transportation) parts.push(activity.transportation);
+  return parts.join(" · ") || "行程活动";
 };
 
 const renderItinerary = (plan) => {
@@ -86,27 +116,43 @@ const renderItinerary = (plan) => {
     card.className = "day-card";
 
     const title = document.createElement("h3");
-    title.textContent = `第 ${day.day || index + 1} 天`;
-    card.append(title);
+    const titleText = document.createElement("span");
+    titleText.textContent = `第 ${day.day || index + 1} 天`;
+    title.append(titleText);
 
     const activities = Array.isArray(day.activities) ? day.activities : [];
+    const dayCost = activities.reduce((sum, activity) => {
+      const cost = Number(activity.cost);
+      return Number.isFinite(cost) ? sum + cost : sum;
+    }, 0);
+
+    if (dayCost > 0) {
+      const cost = document.createElement("span");
+      cost.className = "day-cost";
+      cost.textContent = `约 ¥${dayCost}`;
+      title.append(cost);
+    }
+    card.append(title);
+
     activities.forEach((activity) => {
       const row = document.createElement("div");
       row.className = "activity";
 
       const time = document.createElement("div");
       time.className = "activity-time";
-      time.textContent = `${activity.start_time || "--:--"} - ${activity.end_time || "--:--"}`;
+      time.textContent = formatTime(activity.start_time, activity.end_time);
 
       const body = document.createElement("div");
       const place = activity.position || activity.end || activity.start || "未命名活动";
-      const cost = activity.cost === undefined ? "" : ` · ¥${activity.cost}`;
-      body.innerHTML = `
-        <p class="activity-title"></p>
-        <p class="activity-meta"></p>
-      `;
-      body.querySelector(".activity-title").textContent = place;
-      body.querySelector(".activity-meta").textContent = `${activity.type || "activity"}${cost}`;
+      const name = document.createElement("p");
+      name.className = "activity-title";
+      name.textContent = place;
+
+      const meta = document.createElement("p");
+      meta.className = "activity-meta";
+      meta.textContent = formatActivityMeta(activity);
+
+      body.append(name, meta);
 
       row.append(time, body);
       card.append(row);
@@ -136,19 +182,31 @@ const buildPayload = () => {
   return payload;
 };
 
+sampleButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    fields.query.value = button.dataset.query || "";
+    fields.start_city.value = button.dataset.startCity || "";
+    fields.target_city.value = button.dataset.targetCity || "";
+    fields.days.value = button.dataset.days || "";
+    fields.people_number.value = button.dataset.peopleNumber || "";
+    fields.budget.value = button.dataset.budget || "";
+    fields.query.focus();
+  });
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = buildPayload();
 
-  submitButton.disabled = true;
+  setLoading(true);
   setStatus("生成中", "is-loading");
   showMessage("正在调用 DeepSeek 和本地旅行数据生成行程...", "is-loading");
   setSummary([
-    { label: "From", value: payload.start_city },
-    { label: "To", value: payload.target_city },
-    { label: "Days", value: payload.days ? `${payload.days} 天` : undefined },
-    { label: "People", value: payload.people_number ? `${payload.people_number} 人` : undefined },
-    { label: "Budget", value: payload.budget ? `¥${payload.budget}` : undefined },
+    { label: "出发", value: payload.start_city },
+    { label: "目的地", value: payload.target_city },
+    { label: "天数", value: payload.days ? `${payload.days} 天` : undefined },
+    { label: "人数", value: payload.people_number ? `${payload.people_number} 人` : undefined },
+    { label: "预算", value: payload.budget ? `¥${payload.budget}` : undefined },
   ]);
   itinerary.innerHTML = "";
   jsonOutput.hidden = true;
@@ -177,6 +235,6 @@ form.addEventListener("submit", async (event) => {
     setStatus("失败", "is-error");
     showMessage(`请求失败：${error.message}`, "is-error");
   } finally {
-    submitButton.disabled = false;
+    setLoading(false);
   }
 });
