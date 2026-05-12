@@ -58,6 +58,10 @@ DEEPSEEK_TRUST_ENV_PROXY=false
 
 ## 旅行数据库
 
+  1. 打开 https://github.com/LAMDA-NeSy/ChinaTravel
+  2. 在 README → Quick Start → Setup 中点击:
+     • Google Drive   或   • NJU Drive
+  3. 下载 environment.zip（或类似名称的压缩包）
 产品运行依赖本地旅行数据库。请将数据库解压到：
 
 ```text
