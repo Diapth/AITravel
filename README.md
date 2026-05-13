@@ -6,15 +6,16 @@ ChinaTravel Planner 是一个面向产品使用的中国旅行规划应用。用
 
 ## 当前功能
 
-- 静态 HTML/CSS/JS 前端，访问 FastAPI 根路径即可使用。
+- Vite + Vue 3 + Element Plus 前端，访问 FastAPI 根路径即可使用构建后的工作台。
 - `POST /api/plan` 生成 JSON 行程规划。
 - `GET /api/health` 检查 DeepSeek key 和本地旅行数据库状态。
 - 支持自然语言输入与可选结构化字段组合。
+- 前端在等待规划结果时展示 DeepSeek/LLMNeSy 按天生成过程，已生成的天数会先显示。
 
 ## 技术栈
 
 - 后端：FastAPI、Pydantic、Uvicorn。
-- 前端：原生 HTML、CSS、JavaScript，无构建步骤。
+- 前端：Vite、Vue 3、TypeScript、Element Plus、lucide-vue-next。
 - LLM：DeepSeek API，使用 OpenAI SDK 兼容接口调用。
 - Agent：保留原项目 `LLMNeSy` 规划链路，产品默认调用 `LLMNeSy + deepseek`。
 - 数据环境：`WorldEnv` 读取本地 CSV/JSON 旅行数据库，覆盖景点、餐厅、住宿、城际交通、市内交通和 POI。
@@ -34,6 +35,12 @@ conda activate chinatravel-product
 
 ```bash
 pip install -r requirements.txt
+```
+
+前端依赖使用 npm 安装：
+
+```bash
+npm install
 ```
 
 配置集中写在项目根目录的 `.env` 中。先复制示例文件：
@@ -98,19 +105,33 @@ python -c "from app.runtime_checks import check_runtime; print(check_runtime())"
 {'ok': True, 'deepseek_key_configured': True, 'database_ready': True, 'missing_database_paths': []}
 ```
 
-2. 启动 FastAPI：
+2. 构建前端静态资源：
+
+```bash
+npm run build
+```
+
+构建会把产物写入 `frontend/index.html` 和 `frontend/assets/`，FastAPI 会从该目录挂载页面。
+
+开发前端时也可以单独启动 Vite：
+
+```bash
+npm run dev
+```
+
+3. 启动 FastAPI：
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-3. 浏览器打开：
+4. 浏览器打开：
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-4. 也可以直接请求健康检查：
+5. 也可以直接请求健康检查：
 
 ```bash
 curl http://127.0.0.1:8000/api/health
@@ -205,15 +226,21 @@ python -m pytest -q
 - runtime 健康检查。
 - `/api/plan` 请求/响应结构。
 - planner 输入构造。
-- 静态前端文件和 FastAPI 静态挂载。
+- Vite/Vue 前端文件、生成过程交互文案和 FastAPI 静态挂载。
+
+前端构建校验：
+
+```bash
+npm run build
+```
 
 ## 目录
 
 ```text
-app/          FastAPI 后端和 planner 服务层
-frontend/     静态前端页面
-chinatravel/  原始旅行环境、agent 和运行时约束模块
-tests/        产品化测试
+app/           FastAPI 后端和 planner 服务层
+frontend/      Vue 源码和构建后的静态前端页面
+chinatravel/   原始旅行环境、agent 和运行时约束模块
+tests/         产品化测试
 ```
 
 `chinatravel/symbol_verification/` 是 `LLMNeSy` 运行时依赖，不是可删除的评测壳子。
