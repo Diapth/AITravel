@@ -84,11 +84,26 @@ def test_frontend_results_are_api_driven_not_demo_static():
 
 def test_frontend_uses_compact_desktop_density():
     styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
 
     assert "--app-scale" in styles_css
-    assert "min-height: 164px" in styles_css
+    assert "height: calc((100vh / var(--app-scale)) - 118px)" in styles_css
+    assert "overflow: hidden" in styles_css
+    assert "flex: 1 1 auto" in styles_css
+    assert "overflow-y: auto" in styles_css
+    assert "itinerary-main" in results_vue
+    assert "image-placeholder" in results_vue
+    assert "imageKeywords" in results_vue
     assert "width: min(1760px" in styles_css
     assert "grid-template-columns: minmax(320px, 500px)" in styles_css
+
+
+def test_frontend_composer_uses_compact_field_grid():
+    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    composer_vue = Path("frontend/src/components/PlannerComposer.vue").read_text(encoding="utf-8")
+
+    assert "compact-control-grid" in composer_vue
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in styles_css
 
 
 def test_frontend_result_action_buttons_have_handlers():

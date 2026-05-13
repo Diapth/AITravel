@@ -14,12 +14,14 @@ import {
   Plus,
   Send,
   Sparkles,
+  WandSparkles,
   Trash2,
   Utensils,
   Users,
   Waves,
 } from "lucide-vue-next";
 import type { PlanRequest } from "../services/planner";
+import { requestFieldExtraction } from "../services/planner";
 
 defineProps<{
   disabled: boolean;
@@ -102,6 +104,8 @@ const preferences = reactive([
 
 const queryCount = computed(() => form.query.length);
 const budgetMenuOpen = ref(false);
+const isExtracting = ref(false);
+const extractionMessage = ref("");
 
 function applySample(sample: typeof samples[number]) {
   Object.assign(form, sample);
@@ -133,6 +137,46 @@ function selectBudget(option: typeof budgetOptions[number]) {
   form.budget = option.budget;
   form.budgetLabel = option.label;
   budgetMenuOpen.value = false;
+}
+
+function budgetLabelForAmount(amount: number) {
+  const matched = budgetOptions.find((option) => amount <= option.budget);
+  return matched?.label || budgetOptions[budgetOptions.length - 1].label;
+}
+
+async function extractFields() {
+  const query = form.query.trim();
+  if (!query || isExtracting.value) return;
+
+  isExtracting.value = true;
+  extractionMessage.value = "";
+  try {
+    const data = await requestFieldExtraction(query);
+    if (!data.success || !data.fields) {
+      extractionMessage.value = data.error?.message || "智能填表失败，请稍后重试。";
+      return;
+    }
+
+    const fields = data.fields;
+    if (fields.start_city) form.start_city = fields.start_city;
+    if (fields.target_city) form.target_city = fields.target_city;
+    if (fields.days) form.days = fields.days;
+    if (fields.people_number) form.people_number = fields.people_number;
+    if (fields.budget) {
+      form.budget = fields.budget;
+      form.budgetLabel = budgetLabelForAmount(fields.budget);
+    }
+    if (fields.preferences?.length) {
+      preferences.forEach((item) => {
+        item.active = fields.preferences?.includes(item.label) ?? false;
+      });
+    }
+    extractionMessage.value = "已根据自然语言更新下方字段";
+  } catch (error) {
+    extractionMessage.value = error instanceof Error ? error.message : "智能填表失败，请稍后重试。";
+  } finally {
+    isExtracting.value = false;
+  }
 }
 
 function compactPayload(): PlanRequest {
@@ -181,7 +225,14 @@ function submit() {
         </div>
       </el-form-item>
 
-      <div class="control-stack">
+      <button class="ai-fill-action" type="button" :disabled="disabled || isExtracting || !form.query.trim()" @click="extractFields">
+        <span class="button-spinner" aria-hidden="true" />
+        <WandSparkles :size="17" />
+        <span>{{ isExtracting ? "正在整理字段" : "一键整理下方字段" }}</span>
+      </button>
+      <p v-if="extractionMessage" class="composer-inline-feedback" role="status">{{ extractionMessage }}</p>
+
+      <div class="control-stack compact-control-grid">
         <el-form-item label="出发城市">
           <el-input v-model="form.start_city" :prefix-icon="MapPin" placeholder="上海" :disabled="disabled" clearable />
         </el-form-item>
@@ -207,7 +258,9 @@ function submit() {
             <button type="button" :disabled="disabled" @click="adjust('people_number', 1)"><Plus :size="15" /></button>
           </div>
         </el-form-item>
+      </div>
 
+      <div class="control-stack">
         <el-form-item label="预算范围（人均）">
           <div class="budget-picker">
             <button class="select-like-field" type="button" :disabled="disabled" @click="budgetMenuOpen = !budgetMenuOpen">

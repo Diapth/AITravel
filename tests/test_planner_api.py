@@ -125,6 +125,56 @@ def test_plan_endpoint_uses_planner_and_returns_json(monkeypatch):
     assert response.json()["plan"]["itinerary"] == []
 
 
+def test_extract_fields_endpoint_uses_deepseek_helper(monkeypatch):
+    monkeypatch.setattr(
+        "app.main.check_runtime",
+        lambda: {
+            "ok": True,
+            "deepseek_key_configured": True,
+            "database_ready": True,
+            "missing_database_paths": [],
+        },
+    )
+
+    def fake_extract(query):
+        assert "苏州" in query
+        from app.schemas import ExtractedFields
+
+        return ExtractedFields(
+            start_city="上海",
+            target_city="苏州",
+            days=2,
+            people_number=2,
+            budget=1300,
+            preferences=["自然风光", "美食体验"],
+        )
+
+    monkeypatch.setattr("app.main.extract_fields_from_query", fake_extract)
+    client = TestClient(app)
+
+    response = client.post("/api/extract-fields", json={"query": "从上海去苏州两天，两个人，预算1300"})
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["fields"]["target_city"] == "苏州"
+    assert response.json()["fields"]["preferences"] == ["自然风光", "美食体验"]
+
+
+def test_images_endpoint_degrades_to_empty_images_when_provider_fails(monkeypatch):
+    def fake_search(*args, **kwargs):
+        raise ValueError("provider returned warning html")
+
+    monkeypatch.setattr("app.main.search_images", fake_search)
+    client = TestClient(app)
+
+    response = client.get("/api/images", params={"q": "苏州 拙政园"})
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["images"] == []
+    assert response.json()["error"]["code"] == "IMAGE_SEARCH_UNAVAILABLE"
+
+
 def test_planner_returns_business_error_when_agent_times_out(monkeypatch):
     planner = ChinaTravelPlanner()
     request = PlanRequest(query="当前位置上海，去苏州玩两天。")

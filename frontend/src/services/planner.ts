@@ -78,6 +78,35 @@ export interface RuntimeHealth {
   missing_database_paths: string[];
 }
 
+export interface ExtractedFields {
+  start_city?: string | null;
+  target_city?: string | null;
+  days?: number | null;
+  people_number?: number | null;
+  budget?: number | null;
+  preferences?: string[];
+}
+
+export interface FieldExtractionResponse {
+  success: boolean;
+  fields?: ExtractedFields;
+  error?: PlanError;
+}
+
+export interface ImageSearchItem {
+  title?: string | null;
+  url: string;
+  thumbnail_url?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface ImageSearchResponse {
+  success: boolean;
+  images: ImageSearchItem[];
+  error?: PlanError;
+}
+
 export async function requestPlan(payload: PlanRequest): Promise<PlanResponse> {
   const response = await fetch("/api/plan", {
     method: "POST",
@@ -92,6 +121,51 @@ export async function requestPlan(payload: PlanRequest): Promise<PlanResponse> {
       error: {
         code: `HTTP_${response.status}`,
         message: data.error?.message || "请求失败，请稍后重试。",
+        details: data as unknown as Record<string, unknown>,
+      },
+    };
+  }
+
+  return data;
+}
+
+export async function requestFieldExtraction(query: string): Promise<FieldExtractionResponse> {
+  const response = await fetch("/api/extract-fields", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  const data = (await response.json()) as FieldExtractionResponse;
+
+  if (!response.ok) {
+    return {
+      success: false,
+      error: {
+        code: `HTTP_${response.status}`,
+        message: data.error?.message || "智能填表失败，请稍后重试。",
+        details: data as unknown as Record<string, unknown>,
+      },
+    };
+  }
+
+  return data;
+}
+
+export async function requestImages(keyword: string): Promise<ImageSearchResponse> {
+  const params = new URLSearchParams({ q: keyword });
+  const response = await fetch(`/api/images?${params.toString()}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  const data = (await response.json()) as ImageSearchResponse;
+
+  if (!response.ok) {
+    return {
+      success: false,
+      images: [],
+      error: {
+        code: `HTTP_${response.status}`,
+        message: data.error?.message || "图片搜索失败。",
         details: data as unknown as Record<string, unknown>,
       },
     };

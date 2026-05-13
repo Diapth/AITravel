@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   Bookmark,
   CalendarDays,
@@ -21,6 +21,7 @@ import {
   WalletCards,
 } from "lucide-vue-next";
 import type { BudgetBreakdown, PlanActivity, PlanDay, PlanRequest, PlanResponse, TravelPlan } from "../services/planner";
+import { requestImages } from "../services/planner";
 
 interface ProgressDay {
   day: number;
@@ -41,6 +42,7 @@ const props = defineProps<{
 
 const jsonOpen = ref(false);
 const actionMessage = ref("");
+const dayImages = ref<Record<string, string>>({});
 
 const plan = computed<TravelPlan | undefined>(() => {
   if (props.response?.success) return props.response.plan;
@@ -54,6 +56,36 @@ const hasSubmitted = computed(() => Boolean(props.payload || props.response || p
 const jsonPayload = computed(() => (displayResponse.value ? JSON.stringify(displayResponse.value, null, 2) : ""));
 const displayStatusLabel = computed(() => props.statusLabel);
 const displayStatusMode = computed(() => props.statusMode);
+const friendlyError = computed(() => {
+  const code = props.response?.error?.code;
+  const message = props.errorMessage || props.response?.error?.message || "";
+
+  if (code === "RUNTIME_NOT_READY") {
+    return {
+      title: "运行环境还没准备好",
+      detail: "DeepSeek Key 或本地旅行数据库未配置完整。请先检查顶部服务状态和后端环境。",
+    };
+  }
+
+  if (code === "REQUEST_FAILED" || message.includes("Unexpected token") || message.includes("404")) {
+    return {
+      title: "前端暂时连不上后端",
+      detail: "开发模式下请同时启动 FastAPI，Vite 会把 /api 请求转发到 127.0.0.1:8000。",
+    };
+  }
+
+  if (code === "PLANNER_FAILED") {
+    return {
+      title: "规划器没有生成可用行程",
+      detail: "模型链路已响应，但本地数据或城市名称匹配失败。可以换成数据库已有城市，或在原文里写清出发地、目的地和天数后重试。",
+    };
+  }
+
+  return {
+    title: "这次生成失败了",
+    detail: message || "请稍后重试，或检查后端日志中的 request_id。",
+  };
+});
 
 const summaryItems = computed(() => {
   const source = plan.value || props.payload;
@@ -77,6 +109,34 @@ const highlights = computed(() => {
     .slice(1, 6);
   return names.length ? names : ["漓江山水精华", "遇龙河竹筏体验", "十里画廊骑行", "银子岩溶洞奇观", "阳朔西街夜游"];
 });
+
+watch(
+  itinerary,
+  async (days) => {
+    const nextImages: Record<string, string> = {};
+    await Promise.all(
+      days.map(async (day, index) => {
+        if (dayImage(day)) return;
+        const key = dayImageKey(day, index);
+        const keywords = imageKeywords(day, index);
+        try {
+          for (const keyword of keywords) {
+            const result = await requestImages(keyword);
+            const image = result.images.find((item) => item.thumbnail_url || item.url);
+            if (image) {
+              nextImages[key] = image.thumbnail_url || image.url;
+              break;
+            }
+          }
+        } catch {
+          // The scenic placeholder below remains available when search is unavailable.
+        }
+      }),
+    );
+    dayImages.value = nextImages;
+  },
+  { immediate: true },
+);
 
 function dayCost(day: PlanDay) {
   return (day.activities || []).reduce((sum, activity) => {
@@ -160,6 +220,27 @@ function daySummary(day: PlanDay) {
 
 function dayImage(day: PlanDay) {
   return day.image;
+}
+
+function dayImageKey(day: PlanDay, index: number) {
+  return `${day.day || index + 1}-${dayTitle(day, index)}`;
+}
+
+function imageKeywords(day: PlanDay, index: number) {
+  const destination = day.location || plan.value?.target_city || props.payload?.target_city;
+  const attractionName = day.activities?.find((activity) => activity.type === "attraction")?.position;
+  const title = dayTitle(day, index);
+  const candidates = [
+    attractionName,
+    attractionName && destination ? `${destination} ${attractionName}` : undefined,
+    title,
+    destination,
+  ].filter((item): item is string => Boolean(item?.trim()));
+  return Array.from(new Set(candidates.map((item) => item.trim())));
+}
+
+function resolvedDayImage(day: PlanDay, index: number) {
+  return dayImage(day) || dayImages.value[dayImageKey(day, index)];
 }
 
 function budgetItems(day: PlanDay): BudgetBreakdown[] {
@@ -285,19 +366,20 @@ async function copyJson() {
 
     <p v-if="actionMessage" class="action-feedback" role="status">{{ actionMessage }}</p>
 
-    <div v-if="summaryItems.length" id="summary-strip" class="summary-strip">
-      <div v-for="item in summaryItems" :key="item.label" class="summary-item" :class="{ strong: item.strong }">
-        <component :is="item.icon" :size="29" />
-        <div>
-          <p class="summary-label">{{ item.label }}</p>
-          <p class="summary-value">{{ item.value }}</p>
+    <div class="result-scroll-area">
+      <div v-if="summaryItems.length" id="summary-strip" class="summary-strip">
+        <div v-for="item in summaryItems" :key="item.label" class="summary-item" :class="{ strong: item.strong }">
+          <component :is="item.icon" :size="29" />
+          <div>
+            <p class="summary-label">{{ item.label }}</p>
+            <p class="summary-value">{{ item.value }}</p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <p v-if="plan?.llm_summary" class="plan-summary">{{ plan.llm_summary }}</p>
+      <p v-if="plan?.llm_summary" class="plan-summary">{{ plan.llm_summary }}</p>
 
-    <div v-if="isGenerating || (progressDays.length && !hasResult)" class="generation-panel">
+      <div v-if="isGenerating || (progressDays.length && !hasResult)" class="generation-panel">
       <div class="generation-head">
         <div class="generation-title">
           <Sparkles :size="19" />
@@ -325,65 +407,78 @@ async function copyJson() {
         </article>
       </div>
       <p v-else class="message is-muted">提交旅行需求后，这里会显示当前生成与等待生成的按天状态。</p>
-    </div>
+      </div>
 
-    <p v-if="errorMessage" class="message is-error">{{ errorMessage }}</p>
-    <p v-else-if="isGenerating" class="message is-loading">当前生成中的天数会显示骨架内容，已完成天数会先保留给你阅读。</p>
+      <div v-if="errorMessage" class="message is-error error-card">
+        <strong>{{ friendlyError.title }}</strong>
+        <span>{{ friendlyError.detail }}</span>
+        <small v-if="response?.meta?.request_id">request_id: {{ response.meta.request_id }}</small>
+      </div>
+      <p v-else-if="isGenerating" class="message is-loading">当前生成中的天数会显示骨架内容，已完成天数会先保留给你阅读。</p>
 
-    <section v-if="!hasSubmitted" class="empty-state">
+      <section v-if="!hasSubmitted" class="empty-state">
       <div class="empty-state-icon">
         <Sparkles :size="28" />
       </div>
       <h3>等待生成行程</h3>
       <p>填写左侧旅行需求并点击生成后，前端会调用后端 <code>/api/plan</code>，这里会展示真实返回的行程、预算和 JSON 原文。</p>
-    </section>
+      </section>
 
-    <div class="timeline-list" aria-label="结构化行程">
-      <article v-for="(day, index) in itinerary" :key="index" class="timeline-item">
-        <div class="timeline-rail">
-          <span>第 {{ day.day || index + 1 }} 天</span>
-          <i />
-        </div>
-
-        <section class="itinerary-card">
-          <img v-if="dayImage(day)" class="day-photo" :src="dayImage(day)" :alt="dayTitle(day, index)" />
-          <div v-else class="day-photo scenic-photo" aria-hidden="true">
-            <span />
+      <div class="timeline-list" aria-label="结构化行程">
+        <article v-for="(day, index) in itinerary" :key="index" class="timeline-item">
+          <div class="timeline-rail">
+            <span>第 {{ day.day || index + 1 }} 天</span>
+            <i />
           </div>
-          <div class="day-copy">
-            <h3>{{ dayTitle(day, index) }}</h3>
-            <p>{{ daySummary(day) }}</p>
-            <div class="day-meta">
-              <span><MapPin :size="16" /> {{ day.location || payload?.target_city || "目的地" }}</span>
-              <span><Hotel :size="16" /> 住宿：{{ day.accommodation || "推荐商圈附近" }}</span>
+
+          <section class="itinerary-card">
+            <div class="itinerary-main">
+              <img
+                v-if="resolvedDayImage(day, index)"
+                class="day-photo"
+                :src="resolvedDayImage(day, index)"
+                :alt="dayTitle(day, index)"
+                loading="lazy"
+              />
+              <div v-else class="day-photo image-placeholder" role="img" :aria-label="`${dayTitle(day, index)} 图片暂不可用`">
+                <Trees :size="22" />
+                <span>图片暂不可用</span>
+              </div>
+              <div class="day-copy">
+                <h3>{{ dayTitle(day, index) }}</h3>
+                <p>{{ daySummary(day) }}</p>
+                <div class="day-meta">
+                  <span><MapPin :size="16" /> {{ day.location || payload?.target_city || "目的地" }}</span>
+                  <span><Hotel :size="16" /> 住宿：{{ day.accommodation || "推荐商圈附近" }}</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="schedule-list">
-            <div v-for="(activity, activityIndex) in day.activities || []" :key="activityIndex" class="schedule-item">
-              <component :is="activityIcon(activity.type)" :size="17" />
-              <time>{{ activityTime(activity) }}</time>
-              <span>{{ activityPlace(activity) }}</span>
-              <small v-if="activityMeta(activity)">{{ activityMeta(activity) }}</small>
-              <small v-if="activity.recommended_food">推荐：{{ activity.recommended_food }}</small>
+            <div class="schedule-list">
+              <div v-for="(activity, activityIndex) in day.activities || []" :key="activityIndex" class="schedule-item">
+                <component :is="activityIcon(activity.type)" :size="17" />
+                <time>{{ activityTime(activity) }}</time>
+                <span>{{ activityPlace(activity) }}</span>
+                <small v-if="activityMeta(activity)">{{ activityMeta(activity) }}</small>
+                <small v-if="activity.recommended_food">推荐：{{ activity.recommended_food }}</small>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <aside class="budget-card">
-          <h3>预算（{{ payload?.people_number || plan?.people_number || 2 }} 人）</h3>
-          <div v-for="item in budgetItems(day)" :key="item.label" class="budget-row">
-            <span><component :is="budgetIcon(item.label)" :size="16" /> {{ item.label }}</span>
-            <b>¥{{ formatMoney(item.amount) }}</b>
-          </div>
-          <div class="budget-total">
-            <span>合计</span>
-            <b>¥{{ formatMoney(budgetTotal(day)) }}</b>
-          </div>
-        </aside>
-      </article>
-    </div>
+          <aside class="budget-card">
+            <h3>预算（{{ payload?.people_number || plan?.people_number || 2 }} 人）</h3>
+            <div v-for="item in budgetItems(day)" :key="item.label" class="budget-row">
+              <span><component :is="budgetIcon(item.label)" :size="16" /> {{ item.label }}</span>
+              <b>¥{{ formatMoney(item.amount) }}</b>
+            </div>
+            <div class="budget-total">
+              <span>合计</span>
+              <b>¥{{ formatMoney(budgetTotal(day)) }}</b>
+            </div>
+          </aside>
+        </article>
+      </div>
 
-    <section v-if="hasResult" class="insight-strip" aria-label="行程亮点与提示">
+      <section v-if="hasResult" class="insight-strip" aria-label="行程亮点与提示">
       <div>
         <h3>行程亮点</h3>
         <div class="highlight-chips">
@@ -397,9 +492,9 @@ async function copyJson() {
           <p>桂林天气多变，建议携带雨具；防晒防蚊注意。</p>
         </div>
       </div>
-    </section>
+      </section>
 
-    <section class="json-panel">
+      <section class="json-panel">
       <div class="json-toolbar">
         <button class="json-toggle" type="button" :disabled="!displayResponse" @click="jsonOpen = !jsonOpen">
           <ChevronDown :size="18" :class="{ rotated: jsonOpen }" />
@@ -410,6 +505,7 @@ async function copyJson() {
         </button>
       </div>
       <pre v-if="jsonOpen && displayResponse" id="json-output" class="json-output">{{ jsonPayload }}</pre>
-    </section>
+      </section>
+    </div>
   </section>
 </template>
