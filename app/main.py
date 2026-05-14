@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.amap_demo import AmapDemoClient, AmapDemoError, amap_demo_error, amap_demo_response
 from app.assistants import extract_fields_from_query, search_images
 from app.planner import get_planner
 from app.runtime_checks import check_runtime
@@ -65,6 +66,38 @@ def images(q: str, page: int = 1) -> ImageSearchResponse:
             images=[],
             error=ErrorPayload(code="IMAGE_SEARCH_UNAVAILABLE", message=str(exc)),
         )
+
+
+@app.get("/api/amap-demo/pois")
+def amap_demo_pois(city: str, keywords: str, page_size: int = 10) -> dict:
+    try:
+        return amap_demo_response(AmapDemoClient().search_pois(city, keywords, page_size=page_size))
+    except AmapDemoError as exc:
+        return amap_demo_error(exc)
+
+
+@app.get("/api/amap-demo/hotels")
+def amap_demo_hotels(city: str, keywords: str = "酒店", page_size: int = 10) -> dict:
+    try:
+        return amap_demo_response(AmapDemoClient().search_pois(city, keywords, page_size=page_size))
+    except AmapDemoError as exc:
+        return amap_demo_error(exc)
+
+
+@app.get("/api/amap-demo/route")
+def amap_demo_route(origin: str, destination: str, mode: str = "driving", city: str | None = None) -> dict:
+    try:
+        return amap_demo_response(AmapDemoClient().route(origin, destination, mode, city=city))
+    except AmapDemoError as exc:
+        return amap_demo_error(exc)
+
+
+@app.get("/api/amap-demo/weather")
+def amap_demo_weather(city: str, extensions: str = "base") -> dict:
+    try:
+        return amap_demo_response(AmapDemoClient().weather(city, extensions=extensions))
+    except AmapDemoError as exc:
+        return amap_demo_error(exc)
 
 
 @app.post("/api/plan", response_model=PlanResponse, response_model_exclude_none=True)
