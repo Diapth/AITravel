@@ -17,6 +17,7 @@ from app.schemas import (
     PlanRequest,
     PlanResponse,
 )
+from app.train_12306 import Train12306Client, Train12306Error, train_demo_error, train_demo_response
 
 
 app = FastAPI(title="ChinaTravel Planner", version="1.0.0")
@@ -98,6 +99,29 @@ def amap_demo_weather(city: str, extensions: str = "base") -> dict:
         return amap_demo_response(AmapDemoClient().weather(city, extensions=extensions))
     except AmapDemoError as exc:
         return amap_demo_error(exc)
+
+
+@app.get("/api/train-demo/tickets")
+def train_demo_tickets(
+    date: str,
+    from_station: str,
+    to_station: str,
+    include_price: bool = True,
+    limit: int = 30,
+) -> dict:
+    try:
+        with Train12306Client() as client:
+            return train_demo_response(
+                client.query_tickets(
+                    date,
+                    from_station,
+                    to_station,
+                    include_price=include_price,
+                    limit=limit,
+                )
+            )
+    except Train12306Error as exc:
+        return train_demo_error(exc)
 
 
 @app.post("/api/plan", response_model=PlanResponse, response_model_exclude_none=True)
