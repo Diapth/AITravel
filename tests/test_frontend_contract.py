@@ -73,9 +73,13 @@ def test_frontend_adapts_flat_itinerary_response_shape():
     assert "normalizeItineraryDays" in results_vue
     assert "FlatPlanActivity" in planner_ts
     assert "TrainID" in planner_ts
+    assert "seat_label" in planner_ts
+    assert "ticket_left" in planner_ts
     assert "recommended_food" in planner_ts
     assert "accommodation" in results_vue
     assert "推荐" in results_vue
+    assert "activityCostText" in results_vue
+    assert "intercity_reference" in results_vue
 
 
 def test_frontend_results_are_api_driven_not_demo_static():

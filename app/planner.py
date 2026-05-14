@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.amap_demo import AmapDemoClient
+from app.train_12306 import Train12306Client
 from numpy import floating, integer, ndarray
 
 from app.runtime_checks import PROJECT_ROOT, get_deepseek_api_key
@@ -541,11 +542,17 @@ def _hotel_matches_city(poi: dict[str, Any], city: str) -> bool:
     return city in name or city in address
 
 
+def _is_placeholder_hotel(hotel: dict[str, Any], city: str) -> bool:
+    name = str(hotel.get("name") or "")
+    return not name or name in {f"{city}市区酒店", f"{city}酒店", "某某酒店", "推荐酒店待确认"}
+
+
 def _select_hotel_for_city(hotels: list[dict[str, Any]], city: str) -> dict[str, Any]:
     city_hotels = [hotel for hotel in hotels if _hotel_matches_city(hotel, city)]
     candidates = city_hotels or hotels
+    candidates = [hotel for hotel in candidates if not _is_placeholder_hotel(hotel, city)]
     if not candidates:
-        return {"name": f"{city}市区酒店"}
+        return {"name": "推荐酒店待确认"}
     if not city_hotels and len(hotels) > 1:
         for hotel in hotels:
             if not any(other_city in str(hotel.get("name") or "") for other_city in KNOWN_TRAVEL_CITY_NAMES if other_city != city):
@@ -556,6 +563,114 @@ def _select_hotel_for_city(hotels: list[dict[str, Any]], city: str) -> dict[str,
         key=lambda hotel: (_poi_has_explicit_cost(hotel), _poi_rating(hotel)),
         reverse=True,
     )[0]
+
+
+def _search_hotel_for_city(client: AmapDemoClient, city: str, search_errors: list[str]) -> dict[str, Any]:
+    hotels: list[dict[str, Any]] = []
+    for keyword in (f"{city}酒店", f"{city}住宿", "酒店", "住宿", "客栈"):
+        try:
+            hotels.extend(client.search_pois(city, keyword, page_size=8))
+        except Exception as exc:
+            search_errors.append(f"{city}/{keyword}: {exc}")
+    hotels = _dedupe_pois(hotels)
+    return _select_hotel_for_city(hotels, city)
+
+
+def _money_to_float(value: Any) -> float:
+    if value is None:
+        return 0
+    text = str(value).strip().replace("¥", "").replace("\xa5", "")
+    return _float(text, 0)
+
+
+TRAIN_SEAT_PRIORITY = (
+    "second",
+    "hard_seat",
+    "hard_sleeper",
+    "soft_sleeper",
+    "first",
+    "business",
+    "no_seat",
+)
+TRAIN_SEAT_LABELS = {
+    "second": "二等座",
+    "hard_seat": "硬座",
+    "hard_sleeper": "硬卧",
+    "soft_sleeper": "软卧",
+    "first": "一等座",
+    "business": "商务座/特等座",
+    "no_seat": "无座",
+}
+
+
+def _preferred_ticket_fare(ticket: dict[str, Any]) -> dict[str, Any]:
+    prices = ticket.get("prices") if isinstance(ticket.get("prices"), dict) else {}
+    seats = ticket.get("seats") if isinstance(ticket.get("seats"), dict) else {}
+    for seat_key in TRAIN_SEAT_PRIORITY:
+        price = _money_to_float(prices.get(seat_key))
+        if price <= 0:
+            continue
+        seat_info = seats.get(seat_key) if isinstance(seats.get(seat_key), dict) else {}
+        return {
+            "seat_type": seat_key,
+            "seat_label": seat_info.get("label") or TRAIN_SEAT_LABELS.get(seat_key) or seat_key,
+            "price": price,
+            "left": seat_info.get("left"),
+        }
+    return {"seat_type": None, "seat_label": None, "price": 0, "left": None}
+
+
+def _ticket_to_activity(
+    ticket: dict[str, Any],
+    *,
+    day: int,
+    people_number: int,
+    fallback_start: str,
+    fallback_end: str,
+) -> dict[str, Any]:
+    fare = _preferred_ticket_fare(ticket)
+    price = _float(fare.get("price"), 0)
+    return {
+        "day": day,
+        "type": "train",
+        "TrainID": ticket.get("train_code"),
+        "start": ticket.get("from_station") or fallback_start,
+        "end": ticket.get("to_station") or fallback_end,
+        "position": f"{ticket.get('train_code') or '12306参考车次'} {ticket.get('from_station') or fallback_start} → {ticket.get('to_station') or fallback_end}",
+        "start_time": ticket.get("depart_time") or "时间待定",
+        "end_time": ticket.get("arrive_time") or "时间待定",
+        "duration": ticket.get("duration"),
+        "price": price,
+        "price_source": "12306" if price else "unknown",
+        "seat_type": fare.get("seat_type"),
+        "seat_label": fare.get("seat_label"),
+        "tickets": people_number,
+        "ticket_left": fare.get("left"),
+        "cost": price * people_number if price else 0,
+        "train_ticket": ticket,
+    }
+
+
+def _fallback_intercity_activity(
+    *,
+    day: int,
+    start: str,
+    end: str,
+    start_time: str,
+    end_time: str,
+    note: str,
+) -> dict[str, Any]:
+    return {
+        "day": day,
+        "type": "intercity_reference",
+        "start": start,
+        "end": end,
+        "position": f"{start} → {end}",
+        "start_time": start_time,
+        "end_time": end_time,
+        "cost": 0,
+        "note": note,
+    }
 
 
 class ChinaTravelPlanner:
@@ -774,6 +889,7 @@ class ChinaTravelPlanner:
         people_number = request.people_number or 1
         budget = request.budget or 0
         client = AmapDemoClient()
+        trip_dates = resolve_trip_dates(request)
 
         target_cities = request.target_cities or split_target_cities(request.target_city) or [request.target_city]
         primary_city = target_cities[0]
@@ -821,22 +937,49 @@ class ChinaTravelPlanner:
             itinerary.append(activity)
 
         meal_cost = 80.0 * people_number
-        start_station = f"{request.start_city}站"
-        target_station = f"{primary_city}站"
+        train_errors: list[str] = []
+        outbound_ticket: dict[str, Any] | None = None
+        inbound_ticket: dict[str, Any] | None = None
+        try:
+            with Train12306Client(timeout=8, retry=1) as train_client:
+                outbound = train_client.query_tickets(
+                    trip_dates["departure_date"].isoformat(),
+                    request.start_city,
+                    primary_city,
+                    limit=5,
+                )
+                outbound_ticket = outbound["items"][0] if outbound["items"] else None
+                inbound = train_client.query_tickets(
+                    trip_dates["return_date"].isoformat(),
+                    primary_city,
+                    request.start_city,
+                    limit=5,
+                )
+                inbound_ticket = inbound["items"][0] if inbound["items"] else None
+        except Exception as exc:
+            train_errors.append(str(exc))
 
-        add(
-            {
-                "day": 1,
-                "type": "intercity_reference",
-                "start": request.start_city,
-                "end": destination_label,
-                "position": f"{start_station} → {target_station}",
-                "start_time": "上午",
-                "end_time": "中午",
-                "cost": 0,
-                "note": "高德 fallback 不查询实时火车/航班票务，请按实际车次补充。",
-            }
-        )
+        if outbound_ticket:
+            add(
+                _ticket_to_activity(
+                    outbound_ticket,
+                    day=1,
+                    people_number=people_number,
+                    fallback_start=request.start_city,
+                    fallback_end=primary_city,
+                )
+            )
+        else:
+            add(
+                _fallback_intercity_activity(
+                    day=1,
+                    start=request.start_city,
+                    end=destination_label,
+                    start_time="上午",
+                    end_time="中午",
+                    note="12306 未查询到可用直达车次，请按实际车次补充。",
+                )
+            )
 
         for index in range(days):
             attraction = attractions[index % len(attractions)]
@@ -883,13 +1026,15 @@ class ChinaTravelPlanner:
             if day < days:
                 hotel_city = target_cities[min(index, len(target_cities) - 1)]
                 hotel = _select_hotel_for_city(hotels, hotel_city)
+                if _is_placeholder_hotel(hotel, hotel_city):
+                    hotel = _search_hotel_for_city(client, hotel_city, search_errors)
                 hotel_cost = _poi_cost(hotel, 350)
                 hotel_cost_source = "amap" if _poi_has_explicit_cost(hotel) else "estimate"
                 add(
                     {
                         "day": day,
                         "type": "accommodation",
-                        "position": _poi_name(hotel, f"{hotel_city}市区酒店"),
+                        "position": _poi_name(hotel, "推荐酒店待确认"),
                         "city": hotel_city,
                         "start_time": "20:00",
                         "end_time": "次日 08:30",
@@ -902,17 +1047,22 @@ class ChinaTravelPlanner:
                 )
 
         add(
-            {
-                "day": days,
-                "type": "intercity_reference",
-                "start": destination_label,
-                "end": request.start_city,
-                "position": f"{target_station} → {start_station}",
-                "start_time": "傍晚",
-                "end_time": "晚上",
-                "cost": 0,
-                "note": "高德 fallback 不查询实时火车/航班票务，请按实际车次补充。",
-            }
+            _ticket_to_activity(
+                inbound_ticket,
+                day=days,
+                people_number=people_number,
+                fallback_start=primary_city,
+                fallback_end=request.start_city,
+            )
+            if inbound_ticket
+            else _fallback_intercity_activity(
+                day=days,
+                start=destination_label,
+                end=request.start_city,
+                start_time="傍晚",
+                end_time="晚上",
+                note="12306 未查询到可用直达车次，请按实际车次补充。",
+            )
         )
 
         plan = {
@@ -931,6 +1081,7 @@ class ChinaTravelPlanner:
                 "reason": fallback_reason,
                 "source": "amap",
                 "search_errors": search_errors,
+                "train_errors": train_errors,
                 "note": "本地数据库覆盖不足时使用高德实时 POI、酒店、餐饮和天气生成。",
             },
         }

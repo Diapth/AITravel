@@ -24,7 +24,12 @@ export interface PlanActivity {
   transportation?: string;
   price?: number | string;
   price_source?: string;
+  seat_type?: string;
+  seat_label?: string;
   tickets?: number;
+  ticket_left?: string;
+  duration?: string;
+  train_ticket?: Record<string, unknown>;
   rooms?: number;
   cost?: number | string;
   recommended_food?: string;

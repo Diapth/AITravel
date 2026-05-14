@@ -215,7 +215,7 @@ function normalizeItineraryDays(items: TravelPlan["itinerary"]): PlanDay[] {
 
 function activityPlace(activity: PlanActivity) {
   if (activity.title) return activity.title;
-  if (activity.type === "train" && activity.start && activity.end) return `${activity.start} → ${activity.end}`;
+  if ((activity.type === "train" || activity.type === "intercity_reference") && activity.start && activity.end) return `${activity.start} → ${activity.end}`;
   return activity.position || activity.end || activity.start || "未命名活动";
 }
 
@@ -224,12 +224,21 @@ function activityTime(activity: PlanActivity) {
   return activity.start_time || activity.end_time || "时间待定";
 }
 
+function activityCostText(activity: PlanActivity) {
+  if (activity.cost !== undefined && Number(activity.cost) > 0) return `¥${formatMoney(activity.cost)}`;
+  if (activity.price !== undefined && Number(activity.price) > 0) return `¥${formatMoney(activity.price)}`;
+  return "-";
+}
+
 function activityMeta(activity: PlanActivity) {
   const parts = [
     activityTypeLabel(activity.type),
     activity.TrainID,
     activity.transportation,
-    activity.price !== undefined ? `${activity.price_source === "estimate" ? "估算" : "单价"} ¥${activity.price}` : undefined,
+    activity.seat_label,
+    activity.price !== undefined && Number(activity.price) > 0 ? `${activity.price_source === "estimate" ? "估算" : "单价"} ¥${formatMoney(activity.price)}` : undefined,
+    activity.duration ? `历时 ${activity.duration}` : undefined,
+    activity.ticket_left ? `余票 ${activity.ticket_left}` : undefined,
     activity.tickets ? `${activity.tickets} 张票` : undefined,
     activity.rooms ? `${activity.rooms} 间房` : undefined,
   ].filter(Boolean);
@@ -239,6 +248,7 @@ function activityMeta(activity: PlanActivity) {
 function activityTypeLabel(type?: string) {
   const labels: Record<string, string> = {
     train: "交通",
+    intercity_reference: "交通",
     attraction: "游览",
     restaurant: "餐饮",
     accommodation: "住宿",
@@ -248,7 +258,7 @@ function activityTypeLabel(type?: string) {
 
 function activityIcon(type?: string) {
   if (type === "restaurant") return Utensils;
-  if (type === "train") return TrainFront;
+  if (type === "train" || type === "intercity_reference") return TrainFront;
   if (type === "accommodation") return Hotel;
   if (type === "attraction") return Trees;
   return MapPin;
@@ -572,7 +582,7 @@ function saveItinerary() {
                 <time>{{ activityTime(row.activity) }}</time>
                 <span><component :is="activityIcon(row.activity.type)" :size="15" /> {{ activityTypeLabel(row.activity.type) || "活动" }}</span>
                 <strong>{{ activityPlace(row.activity) }}<small>{{ activityMeta(row.activity) }}</small><small v-if="row.activity.recommended_food">推荐：{{ row.activity.recommended_food }}</small></strong>
-                <b>{{ row.activity.cost !== undefined ? `¥${formatMoney(row.activity.cost)}` : "-" }}</b>
+                <b>{{ activityCostText(row.activity) }}</b>
               </button>
             </div>
 

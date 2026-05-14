@@ -386,8 +386,35 @@ def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_ci
         def weather(self, city):
             return {"lives": [{"city": city, "weather": "晴"}]}
 
+    class FakeTrainClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def query_tickets(self, date, from_station, to_station, limit=5):
+            return {
+                "items": [
+                    {
+                        "train_code": "G100",
+                        "from_station": from_station,
+                        "to_station": to_station,
+                        "depart_time": "08:00",
+                        "arrive_time": "12:00",
+                        "duration": "04:00",
+                        "prices": {"second": "¥320.0"},
+                        "seats": {"second": {"left": "有"}},
+                    }
+                ]
+            }
+
     monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
     monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "Train12306Client", FakeTrainClient)
     monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
 
     result = planner.plan(request)
@@ -402,6 +429,87 @@ def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_ci
     assert accommodation["position"] == "南京新街口酒店"
     assert accommodation["price"] == 360
     assert accommodation["price_source"] == "amap"
+    trains = [activity for activity in result["plan"]["itinerary"] if activity["type"] == "train"]
+    assert trains[0]["TrainID"] == "G100"
+    assert trains[0]["start_time"] == "08:00"
+    assert trains[0]["price"] == 320
+    assert trains[0]["seat_label"] == "二等座"
+    assert trains[0]["ticket_left"] == "有"
+
+
+def test_planner_uses_available_12306_seat_price_when_second_class_missing(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="请规划上海到桂林四天三晚",
+        start_city="上海",
+        target_city="桂林",
+        days=4,
+        people_number=2,
+        budget=4000,
+    )
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities 上海 -> 桂林."}
+
+    class FakeAmapClient:
+        def search_pois(self, city, keywords, page_size=10):
+            if keywords == "景点":
+                return [
+                    {"name": f"{city}景点A", "address": city, "business": {"cost": "0"}},
+                    {"name": f"{city}景点B", "address": city, "business": {"cost": "0"}},
+                ]
+            if keywords in ("餐厅", "美食", "当地美食"):
+                return [{"name": f"{city}餐厅", "address": city, "business": {"cost": "80"}}]
+            if keywords in ("酒店", f"{city}酒店", "住宿"):
+                return [{"name": f"{city}真实酒店", "address": city, "business": {"cost": "360"}}]
+            return []
+
+        def weather(self, city):
+            return {"lives": [{"city": city, "weather": "晴"}]}
+
+    class FakeTrainClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def query_tickets(self, date, from_station, to_station, limit=5):
+            return {
+                "items": [
+                    {
+                        "train_code": "K1558",
+                        "from_station": from_station,
+                        "to_station": to_station,
+                        "depart_time": "04:00",
+                        "arrive_time": "05:12",
+                        "duration": "25:12",
+                        "prices": {"hard_seat": "¥217.0", "hard_sleeper": "¥397.0"},
+                        "seats": {
+                            "hard_seat": {"label": "硬座", "left": "有"},
+                            "hard_sleeper": {"label": "硬卧", "left": "有"},
+                        },
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "Train12306Client", FakeTrainClient)
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    trains = [activity for activity in result["plan"]["itinerary"] if activity["type"] == "train"]
+    assert trains[0]["TrainID"] == "K1558"
+    assert trains[0]["price"] == 217
+    assert trains[0]["seat_label"] == "硬座"
+    assert trains[0]["ticket_left"] == "有"
+    assert trains[0]["cost"] == 434
 
 
 def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
@@ -429,15 +537,31 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
                 return [{"name": f"{city}本地餐厅", "location": f"{city}-餐厅", "business": {"cost": "80"}}]
             if keywords == "酒店":
                 return [{"name": f"{city}市区酒店", "location": f"{city}-酒店", "business": {"rating": "4.8"}}]
-            if keywords in (f"{city}酒店", "住宿"):
+            if keywords == f"{city}酒店":
+                return [{"name": f"{city}山水度假酒店", "location": f"{city}-真实酒店", "business": {"rating": "4.7"}}]
+            if keywords == "住宿":
                 return []
             return []
 
         def weather(self, city):
             return {"lives": [{"city": city, "weather": "晴"}]}
 
+    class EmptyTrainClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def query_tickets(self, *args, **kwargs):
+            return {"items": []}
+
     monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
     monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "Train12306Client", EmptyTrainClient)
     monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
 
     result = planner.plan(request)
@@ -450,7 +574,7 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
     assert ("阳朔", "遇龙河") in searched
     assert any(activity["city"] == "阳朔" for activity in result["plan"]["itinerary"] if activity.get("city"))
     accommodation = next(activity for activity in result["plan"]["itinerary"] if activity["type"] == "accommodation")
-    assert accommodation["position"] == "桂林市区酒店"
+    assert accommodation["position"] == "桂林山水度假酒店"
     assert accommodation["price_source"] == "estimate"
 
 
