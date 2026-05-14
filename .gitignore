@@ -1,6 +1,7 @@
 __pycache__/
 cache/
 logs/
+12306.py
 
 # config
 .py*
