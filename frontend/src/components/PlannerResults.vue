@@ -332,13 +332,23 @@ function routePointId(dayNumber: number, activityIndex: number, suffix = "main")
   return `day-${dayNumber}-activity-${activityIndex}-${suffix}`;
 }
 
+function activityLngLat(activity: PlanActivity): [number, number] | undefined {
+  const location = typeof activity.amap_poi?.location === "string" ? activity.amap_poi.location : "";
+  const [lngText, latText] = location.split(",");
+  const lng = Number(lngText);
+  const lat = Number(latText);
+  return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : undefined;
+}
+
 function buildDayRoutePoints(day: PlanDay, dayIndex: number): RoutePoint[] {
   const dayNumber = Number(day.day || dayIndex + 1);
-  const city = day.location || plan.value?.target_city || props.payload?.target_city;
+  const defaultCity = day.location || plan.value?.target_city || props.payload?.target_city;
   const points: RoutePoint[] = [];
   const seen = new Set<string>();
 
   (day.activities || []).forEach((activity, activityIndex) => {
+    const activityCity = activity.city || defaultCity;
+    const lnglat = activityLngLat(activity);
     const names =
       activity.type === "train"
         ? [activity.start, activity.end].filter(Boolean)
@@ -354,9 +364,10 @@ function buildDayRoutePoints(day: PlanDay, dayIndex: number): RoutePoint[] {
         order: points.length + 1,
         name: trimmed,
         type: activity.type,
-        city,
+        city: activityCity,
         time: activityTime(activity),
         meta: activityMeta(activity),
+        lnglat,
       });
     });
   });

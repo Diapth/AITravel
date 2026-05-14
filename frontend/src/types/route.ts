@@ -7,4 +7,5 @@ export interface RoutePoint {
   city?: string;
   time?: string;
   meta?: string;
+  lnglat?: [number, number];
 }

@@ -21,6 +21,7 @@ export interface PlanActivity {
   start?: string;
   end?: string;
   position?: string;
+  city?: string;
   transportation?: string;
   price?: number | string;
   price_source?: string;
@@ -33,6 +34,7 @@ export interface PlanActivity {
   rooms?: number;
   cost?: number | string;
   recommended_food?: string;
+  amap_poi?: Record<string, unknown>;
 }
 
 export interface BudgetBreakdown {

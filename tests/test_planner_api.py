@@ -512,6 +512,85 @@ def test_planner_uses_available_12306_seat_price_when_second_class_missing(monke
     assert trains[0]["cost"] == 434
 
 
+def test_amap_fallback_respects_late_train_arrival_and_city_bounds(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="请规划上海到桂林两天一晚，晚上到达也要轻松一点。",
+        start_city="上海",
+        target_city="桂林",
+        days=2,
+        people_number=2,
+        budget=3000,
+    )
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities 上海 -> 桂林."}
+
+    class FakeAmapClient:
+        def search_pois(self, city, keywords, page_size=10):
+            if keywords == "景点":
+                return [
+                    {"name": "外地同名景点", "cityname": "重庆市", "location": "106.5516,29.5630", "business": {"cost": "0"}},
+                    {"name": "桂林象鼻山", "cityname": "桂林市", "location": "110.2942,25.2677", "business": {"cost": "0"}},
+                    {"name": "桂林两江四湖", "cityname": "桂林市", "location": "110.2991,25.2747", "business": {"cost": "0"}},
+                ]
+            if keywords == "餐厅":
+                return [{"name": "桂林米粉店", "cityname": "桂林市", "location": "110.29,25.27", "business": {"cost": "35"}}]
+            if keywords == "酒店":
+                return [{"name": "桂林中心酒店", "cityname": "桂林市", "location": "110.28,25.28", "business": {"cost": "320"}}]
+            return []
+
+        def weather(self, city):
+            return {"lives": [{"city": city, "weather": "晴"}]}
+
+    class LateTrainClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def query_tickets(self, date, from_station, to_station, limit=5):
+            return {
+                "items": [
+                    {
+                        "train_code": "G1505",
+                        "from_station": from_station,
+                        "to_station": to_station,
+                        "depart_time": "07:50",
+                        "arrive_time": "17:23",
+                        "duration": "09:33",
+                        "prices": {"second": "¥705.0"},
+                        "seats": {"second": {"left": "8"}},
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "Train12306Client", LateTrainClient)
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    day1 = [activity for activity in result["plan"]["itinerary"] if activity["day"] == 1]
+    assert day1[0]["type"] == "train"
+    assert day1[1]["type"] == "restaurant"
+    assert day1[1]["start_time"] >= "18:23"
+    assert day1[-1]["type"] == "accommodation"
+    assert all(activity.get("position") != "外地同名景点" for activity in result["plan"]["itinerary"])
+    assert any(
+        activity.get("position") == "桂林象鼻山"
+        for activity in result["plan"]["itinerary"]
+        if activity["type"] == "attraction"
+    )
+
+
 def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
     planner = ChinaTravelPlanner()
     request = PlanRequest(

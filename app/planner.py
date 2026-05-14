@@ -271,6 +271,40 @@ def _dedupe_pois(pois: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def _normalize_city_token(value: str) -> str:
+    return re.sub(r"(?:省|市|区|县|自治州|地区)$", "", value.strip())
+
+
+def _poi_matches_city(poi: dict[str, Any], city: str) -> bool:
+    city_token = _normalize_city_token(city)
+    admin_values = [
+        str(poi.get("cityname") or ""),
+        str(poi.get("adname") or ""),
+        str(poi.get("pname") or ""),
+    ]
+    admin_values = [value for value in admin_values if value]
+    if admin_values:
+        return any(city_token and city_token in _normalize_city_token(value) for value in admin_values)
+
+    name = str(poi.get("name") or "")
+    address = str(poi.get("address") or "")
+    if city_token in _normalize_city_token(name) or city_token in _normalize_city_token(address):
+        return True
+    query_city = str(poi.get("_query_city") or "")
+    return bool(query_city and _normalize_city_token(query_city) == city_token)
+
+
+def _filter_pois_for_city(pois: list[dict[str, Any]], city: str) -> list[dict[str, Any]]:
+    return [poi for poi in pois if _poi_matches_city(poi, city)]
+
+
+def _with_query_city(pois: list[dict[str, Any]], city: str) -> list[dict[str, Any]]:
+    tagged = []
+    for poi in pois:
+        tagged.append({**poi, "_query_city": city})
+    return tagged
+
+
 def _extract_interest_keywords(query: str) -> list[str]:
     candidates = [
         "漓江竹筏",
@@ -534,12 +568,7 @@ def _poi_rating(poi: dict[str, Any]) -> float:
 
 
 def _hotel_matches_city(poi: dict[str, Any], city: str) -> bool:
-    name = str(poi.get("name") or "")
-    address = str(poi.get("address") or "")
-    adname = str(poi.get("adname") or "")
-    if city in {adname, adname.removesuffix("区").removesuffix("县").removesuffix("市")}:
-        return True
-    return city in name or city in address
+    return _poi_matches_city(poi, city)
 
 
 def _is_placeholder_hotel(hotel: dict[str, Any], city: str) -> bool:
@@ -569,10 +598,10 @@ def _search_hotel_for_city(client: AmapDemoClient, city: str, search_errors: lis
     hotels: list[dict[str, Any]] = []
     for keyword in (f"{city}酒店", f"{city}住宿", "酒店", "住宿", "客栈"):
         try:
-            hotels.extend(client.search_pois(city, keyword, page_size=8))
+            hotels.extend(_with_query_city(client.search_pois(city, keyword, page_size=8), city))
         except Exception as exc:
             search_errors.append(f"{city}/{keyword}: {exc}")
-    hotels = _dedupe_pois(hotels)
+    hotels = _filter_pois_for_city(_dedupe_pois(hotels), city)
     return _select_hotel_for_city(hotels, city)
 
 
@@ -671,6 +700,63 @@ def _fallback_intercity_activity(
         "cost": 0,
         "note": note,
     }
+
+
+def _time_to_minutes(value: Any) -> int | None:
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"(\d{1,2}):(\d{2})", value)
+    if not match:
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    return hour * 60 + minute
+
+
+def _minutes_to_time(value: int) -> str:
+    value = max(0, min(value, 23 * 60 + 59))
+    return f"{value // 60:02d}:{value % 60:02d}"
+
+
+def _first_day_schedule(arrive_time: Any) -> list[tuple[str, str, str]]:
+    arrive_minutes = _time_to_minutes(arrive_time)
+    if arrive_minutes is None:
+        return [
+            ("attraction", "09:30", "11:30"),
+            ("restaurant", "12:00", "13:00"),
+            ("attraction", "14:30", "16:30"),
+            ("accommodation", "20:00", "次日 08:30"),
+        ]
+
+    start = max(arrive_minutes + 60, 9 * 60 + 30)
+    if start >= 18 * 60:
+        dinner_start = ((max(start, 19 * 60) + 14) // 15) * 15
+        dinner_end = min(dinner_start + 60, 21 * 60)
+        hotel_start = min(dinner_end + 30, 22 * 60)
+        return [
+            ("restaurant", _minutes_to_time(dinner_start), _minutes_to_time(dinner_end)),
+            ("accommodation", _minutes_to_time(hotel_start), "次日 08:30"),
+        ]
+    if start >= 15 * 60:
+        return [
+            ("attraction", _minutes_to_time(start), _minutes_to_time(min(start + 90, 18 * 60))),
+            ("restaurant", "18:30", "19:30"),
+            ("accommodation", "20:00", "次日 08:30"),
+        ]
+    if start >= 11 * 60 + 30:
+        attraction_start = max(14 * 60 + 30, start + 90)
+        return [
+            ("restaurant", _minutes_to_time(start), _minutes_to_time(start + 60)),
+            ("attraction", _minutes_to_time(attraction_start), _minutes_to_time(attraction_start + 120)),
+            ("accommodation", "20:00", "次日 08:30"),
+        ]
+    return [
+        ("attraction", _minutes_to_time(start), "11:30"),
+        ("restaurant", "12:00", "13:00"),
+        ("attraction", "14:30", "16:30"),
+        ("accommodation", "20:00", "次日 08:30"),
+    ]
 
 
 class ChinaTravelPlanner:
@@ -903,24 +989,30 @@ class ChinaTravelPlanner:
         for city in target_cities:
             for keyword in ["景点", *interest_keywords]:
                 try:
-                    attractions.extend(client.search_pois(city, keyword, page_size=8))
+                    attractions.extend(_with_query_city(client.search_pois(city, keyword, page_size=8), city))
                 except Exception as exc:
                     search_errors.append(f"{city}/{keyword}: {exc}")
             for keyword in ["餐厅", "美食", "当地美食"]:
                 try:
-                    restaurants.extend(client.search_pois(city, keyword, page_size=8))
+                    restaurants.extend(_with_query_city(client.search_pois(city, keyword, page_size=8), city))
                 except Exception as exc:
                     search_errors.append(f"{city}/{keyword}: {exc}")
             try:
-                hotels.extend(client.search_pois(city, "酒店", page_size=5))
-                hotels.extend(client.search_pois(city, f"{city}酒店", page_size=5))
-                hotels.extend(client.search_pois(city, "住宿", page_size=5))
+                hotels.extend(_with_query_city(client.search_pois(city, "酒店", page_size=5), city))
+                hotels.extend(_with_query_city(client.search_pois(city, f"{city}酒店", page_size=5), city))
+                hotels.extend(_with_query_city(client.search_pois(city, "住宿", page_size=5), city))
             except Exception as exc:
                 search_errors.append(f"{city}/酒店: {exc}")
 
         attractions = _dedupe_pois(attractions)
         restaurants = _dedupe_pois(restaurants)
         hotels = _dedupe_pois(hotels)
+        attractions_by_city = {city: _filter_pois_for_city(attractions, city) for city in target_cities}
+        restaurants_by_city = {city: _filter_pois_for_city(restaurants, city) for city in target_cities}
+        hotels_by_city = {city: _filter_pois_for_city(hotels, city) for city in target_cities}
+        attractions = _dedupe_pois([poi for city in target_cities for poi in attractions_by_city[city]])
+        restaurants = _dedupe_pois([poi for city in target_cities for poi in restaurants_by_city[city]])
+        hotels = _dedupe_pois([poi for city in target_cities for poi in hotels_by_city[city]])
 
         if len(attractions) < 2:
             detail = f"; search_errors={search_errors}" if search_errors else ""
@@ -982,52 +1074,93 @@ class ChinaTravelPlanner:
             )
 
         for index in range(days):
-            attraction = attractions[index % len(attractions)]
             city = target_cities[index % len(target_cities)]
-            restaurant = restaurants[index % len(restaurants)] if restaurants else {"name": f"{city}本地餐厅"}
+            city_attractions = attractions_by_city.get(city) or attractions
+            city_restaurants = restaurants_by_city.get(city) or restaurants
+            attraction = city_attractions[index % len(city_attractions)]
+            restaurant = city_restaurants[index % len(city_restaurants)] if city_restaurants else {"name": f"{city}本地餐厅"}
             day = index + 1
-            add(
-                {
-                    "day": day,
-                    "type": "attraction",
-                    "position": _poi_name(attraction, f"{city}景点"),
-                    "city": city,
-                    "start_time": "09:30",
-                    "end_time": "11:30",
-                    "cost": _poi_cost(attraction, 0) * people_number,
-                    "amap_poi": attraction,
-                }
-            )
-            add(
-                {
-                    "day": day,
-                    "type": "restaurant",
-                    "position": _poi_name(restaurant, f"{city}餐厅"),
-                    "city": city,
-                    "start_time": "12:00",
-                    "end_time": "13:00",
-                    "cost": _poi_cost(restaurant, meal_cost) * people_number,
-                    "amap_poi": restaurant,
-                }
-            )
-            next_attraction = attractions[(index + 1) % len(attractions)]
-            add(
-                {
-                    "day": day,
-                    "type": "attraction",
-                    "position": _poi_name(next_attraction, f"{city}景点"),
-                    "city": city,
-                    "start_time": "14:30",
-                    "end_time": "16:30",
-                    "cost": _poi_cost(next_attraction, 0) * people_number,
-                    "amap_poi": next_attraction,
-                }
-            )
+            if day == 1:
+                slots = _first_day_schedule(outbound_ticket.get("arrive_time") if outbound_ticket else None)
+                attraction_offset = 0
+                for slot_type, start_time, end_time in slots:
+                    if slot_type == "accommodation":
+                        continue
+                    if slot_type == "restaurant":
+                        add(
+                            {
+                                "day": day,
+                                "type": "restaurant",
+                                "position": _poi_name(restaurant, f"{city}餐厅"),
+                                "city": city,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "cost": _poi_cost(restaurant, meal_cost) * people_number,
+                                "amap_poi": restaurant,
+                            }
+                        )
+                    else:
+                        slot_attraction = city_attractions[(index + attraction_offset) % len(city_attractions)]
+                        attraction_offset += 1
+                        add(
+                            {
+                                "day": day,
+                                "type": "attraction",
+                                "position": _poi_name(slot_attraction, f"{city}景点"),
+                                "city": city,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "cost": _poi_cost(slot_attraction, 0) * people_number,
+                                "amap_poi": slot_attraction,
+                            }
+                        )
+            else:
+                add(
+                    {
+                        "day": day,
+                        "type": "attraction",
+                        "position": _poi_name(attraction, f"{city}景点"),
+                        "city": city,
+                        "start_time": "09:30",
+                        "end_time": "11:30",
+                        "cost": _poi_cost(attraction, 0) * people_number,
+                        "amap_poi": attraction,
+                    }
+                )
+                add(
+                    {
+                        "day": day,
+                        "type": "restaurant",
+                        "position": _poi_name(restaurant, f"{city}餐厅"),
+                        "city": city,
+                        "start_time": "12:00",
+                        "end_time": "13:00",
+                        "cost": _poi_cost(restaurant, meal_cost) * people_number,
+                        "amap_poi": restaurant,
+                    }
+                )
+                next_attraction = city_attractions[(index + 1) % len(city_attractions)]
+                add(
+                    {
+                        "day": day,
+                        "type": "attraction",
+                        "position": _poi_name(next_attraction, f"{city}景点"),
+                        "city": city,
+                        "start_time": "14:30",
+                        "end_time": "16:30",
+                        "cost": _poi_cost(next_attraction, 0) * people_number,
+                        "amap_poi": next_attraction,
+                    }
+                )
             if day < days:
                 hotel_city = target_cities[min(index, len(target_cities) - 1)]
-                hotel = _select_hotel_for_city(hotels, hotel_city)
+                hotel = _select_hotel_for_city(hotels_by_city.get(hotel_city) or hotels, hotel_city)
                 if _is_placeholder_hotel(hotel, hotel_city):
                     hotel = _search_hotel_for_city(client, hotel_city, search_errors)
+                hotel_slot = next(
+                    slot for slot in _first_day_schedule(outbound_ticket.get("arrive_time") if outbound_ticket and day == 1 else None)
+                    if slot[0] == "accommodation"
+                )
                 hotel_cost = _poi_cost(hotel, 350)
                 hotel_cost_source = "amap" if _poi_has_explicit_cost(hotel) else "estimate"
                 add(
@@ -1036,8 +1169,8 @@ class ChinaTravelPlanner:
                         "type": "accommodation",
                         "position": _poi_name(hotel, "推荐酒店待确认"),
                         "city": hotel_city,
-                        "start_time": "20:00",
-                        "end_time": "次日 08:30",
+                        "start_time": hotel_slot[1],
+                        "end_time": hotel_slot[2],
                         "price": hotel_cost,
                         "price_source": hotel_cost_source,
                         "rooms": 1,

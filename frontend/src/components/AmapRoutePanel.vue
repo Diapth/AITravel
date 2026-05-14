@@ -239,6 +239,7 @@ function addRouteLine(path: [number, number][], isFallback: boolean) {
 }
 
 async function resolvePoint(point: RoutePoint, index: number): Promise<ResolvedPoint | null> {
+  if (isLngLat(point.lnglat)) return { ...point, lnglat: point.lnglat };
   const knownCoordinate = fallbackCoordinate(point, index, false);
   if (knownCoordinate) return { ...point, lnglat: knownCoordinate };
   const geocoded = await resolveByGeocoder(point);
@@ -251,17 +252,18 @@ async function resolveByGeocoder(point: RoutePoint) {
     (item): item is string => Boolean(item?.trim()),
   );
   for (const query of queries) {
-    const cached = geocodeCache.get(query);
+    const cacheKey = `${point.city || "全国"}:${query}`;
+    const cached = geocodeCache.get(cacheKey);
     if (cached) return cached;
     if (cached === null) continue;
-    const lnglat = await geocode(query);
-    geocodeCache.set(query, lnglat);
+    const lnglat = await geocode(query, point.city);
+    geocodeCache.set(cacheKey, lnglat);
     if (lnglat) return lnglat;
   }
   return null;
 }
 
-function geocode(query: string): Promise<[number, number] | null> {
+function geocode(query: string, city?: string): Promise<[number, number] | null> {
   return new Promise((resolve) => {
     if (!geocoder) {
       resolve(null);
@@ -276,14 +278,37 @@ function geocode(query: string): Promise<[number, number] | null> {
     };
     const timer = window.setTimeout(() => finish(null), 1800);
     geocoder.getLocation(query, (status: string, result: any) => {
-      const location = result?.geocodes?.[0]?.location;
-      if (status === "complete" && location) {
+      const geocodeItem = result?.geocodes?.[0];
+      const location = geocodeItem?.location;
+      if (status === "complete" && location && geocodeMatchesCity(geocodeItem, city)) {
         finish([Number(location.lng), Number(location.lat)]);
         return;
       }
       finish(null);
     });
   });
+}
+
+function isLngLat(value: unknown): value is [number, number] {
+  return Array.isArray(value) && value.length === 2 && value.every((item) => Number.isFinite(Number(item)));
+}
+
+function geocodeMatchesCity(geocodeItem: any, city?: string) {
+  const cityToken = normalizeCity(city || "");
+  if (!cityToken) return true;
+  const component = geocodeItem?.addressComponent || {};
+  const cityValue = Array.isArray(component.city) ? component.city.join("") : String(component.city || "");
+  const texts = [
+    cityValue,
+    String(component.district || ""),
+    String(component.province || ""),
+    String(geocodeItem?.formattedAddress || ""),
+  ];
+  return texts.some((text) => normalizeCity(text).includes(cityToken));
+}
+
+function normalizeCity(value: string) {
+  return value.replace(/[省市区县自治州地区\s]/g, "");
 }
 
 function fallbackCoordinate(point: RoutePoint, index: number, allowCityScatter: boolean): [number, number] | null {

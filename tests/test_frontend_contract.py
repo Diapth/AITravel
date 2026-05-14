@@ -50,6 +50,8 @@ def test_frontend_uses_product_workspace_layout():
     assert "AMap.Geocoder" in map_vue
     assert "AMap.Driving" in map_vue
     assert "resolveDrivingSegment" in map_vue
+    assert "geocodeMatchesCity" in map_vue
+    assert "isLngLat(point.lnglat)" in map_vue
 
 
 def test_frontend_shows_llm_generation_progress():
@@ -80,6 +82,8 @@ def test_frontend_adapts_flat_itinerary_response_shape():
     assert "推荐" in results_vue
     assert "activityCostText" in results_vue
     assert "intercity_reference" in results_vue
+    assert "activityLngLat" in results_vue
+    assert "amap_poi" in planner_ts
 
 
 def test_frontend_results_are_api_driven_not_demo_static():
