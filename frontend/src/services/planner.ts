@@ -2,6 +2,9 @@ export interface PlanRequest {
   query: string;
   start_city?: string;
   target_city?: string;
+  target_cities?: string[];
+  departure_date?: string;
+  return_date?: string;
   days?: number;
   people_number?: number;
   budget?: number;
@@ -49,6 +52,10 @@ export type FlatPlanActivity = PlanActivity & {
 export interface TravelPlan {
   start_city?: string;
   target_city?: string;
+  target_cities?: string[];
+  departure_date?: string;
+  return_date?: string;
+  date_source?: string;
   days?: number;
   people_number?: number;
   budget?: number;

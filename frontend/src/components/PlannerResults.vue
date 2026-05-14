@@ -91,9 +91,13 @@ const summaryItems = computed(() => {
   const days = source?.days || props.payload?.days;
   const people = source?.people_number || props.payload?.people_number;
   const budget = source?.budget || props.payload?.budget;
+  const departureDate = source?.departure_date || props.payload?.departure_date;
+  const returnDate = source?.return_date || props.payload?.return_date;
+  const dateRange = departureDate && returnDate ? `${departureDate} 至 ${returnDate}` : departureDate || returnDate;
   return [
     { label: "出发地", value: source?.start_city, icon: MapPin },
     { label: "目的地", value: source?.target_city, icon: MapPin },
+    { label: "出返程", value: dateRange, icon: CalendarDays },
     { label: "天数", value: days ? `${days} 天 ${Math.max(Number(days) - 1, 0)} 晚` : undefined, icon: CalendarDays },
     { label: "人数", value: people ? `${people} 人` : undefined, icon: Users },
     { label: "预算（人均）", value: budget ? `¥${formatMoney(budget)}` : undefined, icon: WalletCards, strong: true },

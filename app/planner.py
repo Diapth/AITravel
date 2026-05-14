@@ -7,6 +7,7 @@ import sys
 import time
 import csv
 import httpx
+from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -111,14 +112,84 @@ def make_request_id() -> str:
     return f"web-{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}"
 
 
+def resolve_trip_dates(request: PlanRequest, today: date | None = None) -> dict[str, Any]:
+    days = request.days or 3
+    if request.departure_date and request.return_date:
+        return {
+            "departure_date": request.departure_date,
+            "return_date": request.return_date,
+            "source": "user",
+        }
+    if request.departure_date:
+        return {
+            "departure_date": request.departure_date,
+            "return_date": request.departure_date + timedelta(days=days - 1),
+            "source": "user_departure_auto_return",
+        }
+    if request.return_date:
+        return {
+            "departure_date": request.return_date - timedelta(days=days - 1),
+            "return_date": request.return_date,
+            "source": "auto_departure_user_return",
+        }
+
+    base = today or date.today()
+    days_until_saturday = (5 - base.weekday()) % 7
+    if days_until_saturday == 0:
+        days_until_saturday = 7
+    departure_date = base + timedelta(days=days_until_saturday)
+    return {
+        "departure_date": departure_date,
+        "return_date": departure_date + timedelta(days=days - 1),
+        "source": "auto_recommended",
+    }
+
+
+def _date_payload(trip_dates: dict[str, Any]) -> dict[str, str]:
+    return {
+        "departure_date": trip_dates["departure_date"].isoformat(),
+        "return_date": trip_dates["return_date"].isoformat(),
+        "date_source": str(trip_dates["source"]),
+    }
+
+
+def enrich_plan_with_request_context(plan: Any, request: PlanRequest) -> Any:
+    if not isinstance(plan, dict):
+        return plan
+
+    target_cities = request.target_cities or split_target_cities(request.target_city)
+    if request.start_city:
+        plan.setdefault("start_city", request.start_city)
+    if target_cities:
+        plan["target_cities"] = target_cities
+        plan["target_city"] = "、".join(target_cities)
+    elif request.target_city:
+        plan.setdefault("target_city", request.target_city)
+    if request.days is not None:
+        plan.setdefault("days", request.days)
+    if request.people_number is not None:
+        plan.setdefault("people_number", request.people_number)
+    if request.budget is not None:
+        plan.setdefault("budget", request.budget)
+
+    plan.update(_date_payload(resolve_trip_dates(request)))
+    return plan
+
+
 def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[str, Any]:
     supplements = []
+    target_cities = request.target_cities or split_target_cities(request.target_city)
+    trip_dates = resolve_trip_dates(request)
     if request.start_city:
         supplements.append(f"出发城市{request.start_city}")
-    if request.target_city:
+    if target_cities:
+        supplements.append(f"目标城市{'、'.join(target_cities)}")
+    elif request.target_city:
         supplements.append(f"目标城市{request.target_city}")
     if request.days is not None:
         supplements.append(f"行程天数{request.days}天")
+    supplements.append(f"出发日期{trip_dates['departure_date'].isoformat()}")
+    supplements.append(f"回程日期{trip_dates['return_date'].isoformat()}")
     if request.people_number is not None:
         supplements.append(f"出行人数{request.people_number}人")
     if request.budget is not None:
@@ -136,6 +207,11 @@ def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[s
         query["start_city"] = request.start_city
     if request.target_city:
         query["target_city"] = request.target_city
+    if target_cities:
+        query["target_cities"] = target_cities
+    query["departure_date"] = trip_dates["departure_date"].isoformat()
+    query["return_date"] = trip_dates["return_date"].isoformat()
+    query["date_source"] = trip_dates["source"]
     if request.days is not None:
         query["days"] = request.days
     if request.people_number is not None:
@@ -623,6 +699,7 @@ class ChinaTravelPlanner:
                 "source": "local_database",
             },
         }
+        enrich_plan_with_request_context(plan, request)
         self._add_fallback_llm_summary(request, plan)
         write_request_trace(request_id, "fallback_plan.json", plan)
         return plan
@@ -659,7 +736,7 @@ class ChinaTravelPlanner:
         budget = request.budget or 0
         client = AmapDemoClient()
 
-        target_cities = split_target_cities(request.target_city) or [request.target_city]
+        target_cities = request.target_cities or split_target_cities(request.target_city) or [request.target_city]
         primary_city = target_cities[0]
         destination_label = "、".join(target_cities)
         interest_keywords = _extract_interest_keywords(request.query)
@@ -812,6 +889,7 @@ class ChinaTravelPlanner:
                 "note": "本地数据库覆盖不足时使用高德实时 POI、酒店、餐饮和天气生成。",
             },
         }
+        enrich_plan_with_request_context(plan, request)
         self._add_fallback_llm_summary(request, plan)
         write_request_trace(request_id, "amap_fallback_plan.json", plan)
         return plan
@@ -976,7 +1054,7 @@ class ChinaTravelPlanner:
 
         result = {
             "success": True,
-            "plan": json_safe(plan),
+            "plan": json_safe(enrich_plan_with_request_context(plan, request)),
             "meta": {
                 "request_id": request_id,
                 "agent": "LLMNeSy",

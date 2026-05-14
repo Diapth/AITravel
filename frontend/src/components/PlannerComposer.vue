@@ -37,6 +37,8 @@ const form = reactive({
   start_city: "上海",
   target_city: "桂林, 阳朔",
   days: 4,
+  departure_date: "",
+  return_date: "",
   people_number: 2,
   budget: 3400,
   budgetLabel: "中等预算（¥2,000 - ¥3,500 / 人）",
@@ -55,6 +57,8 @@ const samples = [
     start_city: "上海",
     target_city: "成都",
     days: 3,
+    departure_date: "",
+    return_date: "",
     people_number: 2,
     budget: 3000,
     budgetLabel: "中等预算（¥2,000 - ¥3,500 / 人）",
@@ -65,6 +69,8 @@ const samples = [
     start_city: "上海",
     target_city: "大理, 丽江",
     days: 5,
+    departure_date: "",
+    return_date: "",
     people_number: 2,
     budget: 5200,
     budgetLabel: "舒适预算（¥3,500 - ¥5,500 / 人）",
@@ -75,6 +81,8 @@ const samples = [
     start_city: "上海",
     target_city: "厦门",
     days: 4,
+    departure_date: "",
+    return_date: "",
     people_number: 2,
     budget: 4000,
     budgetLabel: "中等预算（¥2,000 - ¥3,500 / 人）",
@@ -85,6 +93,8 @@ const samples = [
     start_city: "上海",
     target_city: "西安",
     days: 3,
+    departure_date: "",
+    return_date: "",
     people_number: 2,
     budget: 3200,
     budgetLabel: "中等预算（¥2,000 - ¥3,500 / 人）",
@@ -116,6 +126,8 @@ function clearForm() {
   form.start_city = "";
   form.target_city = "";
   form.days = 4;
+  form.departure_date = "";
+  form.return_date = "";
   form.people_number = 2;
   form.budget = 3400;
   form.budgetLabel = "中等预算（¥2,000 - ¥3,500 / 人）";
@@ -142,6 +154,13 @@ function selectBudget(option: typeof budgetOptions[number]) {
 function budgetLabelForAmount(amount: number) {
   const matched = budgetOptions.find((option) => amount <= option.budget);
   return matched?.label || budgetOptions[budgetOptions.length - 1].label;
+}
+
+function targetCityList() {
+  return form.target_city
+    .split(/[,，、/|;；]+|(?:和|与|及|以及)/)
+    .map((city) => city.trim())
+    .filter(Boolean);
 }
 
 async function extractFields() {
@@ -183,8 +202,9 @@ function compactPayload(): PlanRequest {
   const selectedPreferences = preferences.filter((item) => item.active).map((item) => item.label);
   const queryWithPreferences =
     selectedPreferences.length > 0 ? `${form.query.trim()} 兴趣偏好：${selectedPreferences.join("、")}。` : form.query.trim();
+  const cities = targetCityList();
   return Object.fromEntries(
-    Object.entries({ ...form, query: queryWithPreferences })
+    Object.entries({ ...form, query: queryWithPreferences, target_cities: cities.length ? cities : undefined })
       .filter(([key]) => key !== "budgetLabel")
       .map(([key, value]) => [key, typeof value === "string" ? value.trim() : value])
       .filter(([, value]) => value !== "" && value !== null && value !== undefined),
@@ -254,6 +274,30 @@ function submit() {
             <button type="button" :disabled="disabled" @click="adjust('days', -1)"><Minus :size="15" /></button>
             <button type="button" :disabled="disabled" @click="adjust('days', 1)"><Plus :size="15" /></button>
           </div>
+        </el-form-item>
+
+        <el-form-item label="出发日期">
+          <el-date-picker
+            v-model="form.departure_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="自动推荐"
+            :prefix-icon="CalendarDays"
+            :disabled="disabled"
+            clearable
+          />
+        </el-form-item>
+
+        <el-form-item label="回程日期">
+          <el-date-picker
+            v-model="form.return_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="按天数自动推算"
+            :prefix-icon="CalendarDays"
+            :disabled="disabled"
+            clearable
+          />
         </el-form-item>
 
         <el-form-item label="出行人数">

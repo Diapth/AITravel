@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app import planner as planner_module
-from app.planner import ChinaTravelPlanner, build_query
+from app.planner import ChinaTravelPlanner, build_query, resolve_trip_dates
 from app.schemas import PlanRequest
 
 
@@ -16,6 +17,8 @@ def test_build_query_merges_optional_structured_fields():
         query="请给我一个旅行规划。",
         start_city="上海",
         target_city="苏州",
+        departure_date="2026-06-06",
+        return_date="2026-06-07",
         days=2,
         people_number=2,
         budget=1300,
@@ -26,12 +29,53 @@ def test_build_query_merges_optional_structured_fields():
     assert query["uid"] == "web-request"
     assert query["nature_language"] == (
         "请给我一个旅行规划。\n"
-        "补充结构化需求：出发城市上海；目标城市苏州；行程天数2天；出行人数2人；预算1300元。"
+        "补充结构化需求：出发城市上海；目标城市苏州；行程天数2天；出发日期2026-06-06；回程日期2026-06-07；出行人数2人；预算1300元。"
     )
     assert query["start_city"] == "上海"
     assert query["target_city"] == "苏州"
+    assert query["departure_date"] == "2026-06-06"
+    assert query["return_date"] == "2026-06-07"
+    assert query["date_source"] == "user"
     assert query["days"] == 2
     assert query["people_number"] == 2
+
+
+def test_build_query_accepts_target_cities_and_auto_recommends_dates(monkeypatch):
+    request = PlanRequest(
+        query="请规划桂林和阳朔四天三晚。",
+        start_city="上海",
+        target_cities=["桂林", "阳朔"],
+        days=4,
+        people_number=2,
+    )
+
+    monkeypatch.setattr(
+        planner_module,
+        "date",
+        type("FakeDate", (date,), {"today": classmethod(lambda cls: date(2026, 5, 14))}),
+    )
+    query = build_query(request)
+
+    assert query["target_city"] == "桂林、阳朔"
+    assert query["target_cities"] == ["桂林", "阳朔"]
+    assert query["departure_date"] == "2026-05-16"
+    assert query["return_date"] == "2026-05-19"
+    assert query["date_source"] == "auto_recommended"
+
+
+def test_resolve_trip_dates_infers_missing_return_date():
+    request = PlanRequest(
+        query="南京三天两晚",
+        target_city="南京",
+        days=3,
+        departure_date="2026-06-01",
+    )
+
+    dates = resolve_trip_dates(request)
+
+    assert dates["departure_date"].isoformat() == "2026-06-01"
+    assert dates["return_date"].isoformat() == "2026-06-03"
+    assert dates["source"] == "user_departure_auto_return"
 
 
 def test_build_query_can_use_request_id():
@@ -220,11 +264,12 @@ def test_planner_serializes_numpy_plan_and_writes_request_trace(tmp_path, monkey
     result = planner.plan(request)
 
     assert result["success"] is True
-    assert result["plan"] == {
-        "people_number": 2,
-        "score": 0.95,
-        "route": ["上海", "苏州"],
-    }
+    assert result["plan"]["people_number"] == 2
+    assert result["plan"]["score"] == 0.95
+    assert result["plan"]["route"] == ["上海", "苏州"]
+    assert result["plan"]["departure_date"]
+    assert result["plan"]["return_date"]
+    assert result["plan"]["date_source"] == "auto_recommended"
 
     trace_dir = tmp_path / "web-test-trace"
     request_trace = json.loads((trace_dir / "api_request.json").read_text(encoding="utf-8"))

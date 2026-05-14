@@ -406,8 +406,13 @@ h2 {
 }
 
 .compact-control-grid .el-input__wrapper,
+.compact-control-grid .el-date-editor,
 .compact-control-grid .stepper-field {
   min-height: 38px;
+}
+
+.compact-control-grid .el-date-editor.el-input {
+  width: 100%;
 }
 
 .compact-control-grid .stepper-field {

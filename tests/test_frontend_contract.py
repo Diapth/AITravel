@@ -114,7 +114,8 @@ def test_frontend_amap_env_is_documented():
 
     assert "VITE_AMAP_API_KEY=91fc8915faa9ede9655b9be2d25e4f43" in env_text
     assert "VITE_AMAP_SECURITY_CODE=3a1011379c1da036ff9d07a91e516406" in env_text
-    assert "AMAP_WEB_SERVICE_KEY=91fc8915faa9ede9655b9be2d25e4f43" in env_text
+    assert "AMAP_WEB_SERVICE_KEY=" in env_text
+    assert "AMAP_WEB_SERVICE_KEY=91fc8915faa9ede9655b9be2d25e4f43" not in env_text
 
 
 def test_frontend_composer_uses_compact_field_grid():
