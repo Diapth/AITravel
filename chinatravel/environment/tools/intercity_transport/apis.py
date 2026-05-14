@@ -2,6 +2,8 @@ import os
 import pandas as pd
 from pandas import DataFrame
 
+from chinatravel.environment.sqlite_store import read_json_blob, sqlite_available
+
 
 def time2float(time_str):
     h, m = time_str.split(":")
@@ -13,9 +15,12 @@ class IntercityTransport:
         curdir = os.path.dirname(os.path.realpath(__file__))
         self.base_path = os.path.join(curdir, path)
         self.airplane_path = self.base_path + "airplane.jsonl"
-        self.airplane_df = pd.read_json(
-            self.airplane_path, lines=True, keep_default_dates=False
-        )
+        if sqlite_available():
+            self.airplane_df = pd.DataFrame(read_json_blob("airplane"))
+        else:
+            self.airplane_df = pd.read_json(
+                self.airplane_path, lines=True, keep_default_dates=False
+            )
         city_list = [
             "上海",
             "北京",
@@ -30,16 +35,17 @@ class IntercityTransport:
         ]
         self.train_df_dict = {}
 
+        train_blob = read_json_blob("train") if sqlite_available() else None
         for start_city in city_list:
             for end_city in city_list:
                 if start_city == end_city:
                     continue
-                train_path = (
-                    self.base_path
-                    + "train/"
-                    + "from_{}_to_{}.json".format(start_city, end_city)
-                )
-                train_df = pd.read_json(train_path)
+                key = "from_{}_to_{}".format(start_city, end_city)
+                if train_blob is not None:
+                    train_df = pd.DataFrame(train_blob[key])
+                else:
+                    train_path = self.base_path + "train/" + key + ".json"
+                    train_df = pd.read_json(train_path)
                 self.train_df_dict[(start_city, end_city)] = train_df
 
     def select(

@@ -6,6 +6,8 @@ from geopy.distance import geodesic
 
 import sys
 
+from chinatravel.environment.sqlite_store import read_city_table, sqlite_available
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from poi.apis import Poi
 
@@ -35,8 +37,12 @@ class Attractions:
         ]
 
         self.data = {}
-        for i, city in enumerate(city_list):
-            self.data[city] = pd.read_csv(data_path_list[i])
+        if sqlite_available():
+            for city in city_list:
+                self.data[city] = read_city_table("attractions", city)
+        else:
+            for i, city in enumerate(city_list):
+                self.data[city] = pd.read_csv(data_path_list[i])
         self.key_type_tuple_list_map = {}
         for city in city_list:
             self.key_type_tuple_list_map[city] = []

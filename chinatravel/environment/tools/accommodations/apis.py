@@ -6,6 +6,8 @@ import os
 
 import sys
 
+from chinatravel.environment.sqlite_store import read_city_table, sqlite_available
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from poi.apis import Poi
 
@@ -33,8 +35,12 @@ class Accommodations:
             for city in city_list
         ]
         self.data = {}
-        for i, city in enumerate(city_list):
-            self.data[city] = pd.read_csv(data_path_list[i]).dropna()
+        if sqlite_available():
+            for city in city_list:
+                self.data[city] = read_city_table("accommodations", city).dropna()
+        else:
+            for i, city in enumerate(city_list):
+                self.data[city] = pd.read_csv(data_path_list[i]).dropna()
         self.key_type_tuple_list = {}
         for city in city_list:
             self.key_type_tuple_list[city] = []

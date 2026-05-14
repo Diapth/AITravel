@@ -8,6 +8,7 @@ from chinatravel.config import get_env_value
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATABASE_ROOT = Path("chinatravel/environment/database")
+SQLITE_DATABASE_PATH = DATABASE_ROOT / "chinatravel.sqlite"
 REQUIRED_DATABASE_PATHS = (
     Path("attractions"),
     Path("restaurants"),
@@ -25,6 +26,7 @@ def get_deepseek_api_key(env_file: str | Path | None = None) -> str | None:
 def check_runtime(project_root: Path | None = None) -> dict[str, Any]:
     root = Path(project_root) if project_root is not None else PROJECT_ROOT
     missing_database_paths = []
+    sqlite_database_path = root / SQLITE_DATABASE_PATH
 
     for relative_path in REQUIRED_DATABASE_PATHS:
         database_path = root / DATABASE_ROOT / relative_path
@@ -33,10 +35,13 @@ def check_runtime(project_root: Path | None = None) -> dict[str, Any]:
 
     deepseek_key_configured = bool(get_deepseek_api_key())
     database_ready = not missing_database_paths
+    sqlite_database_ready = sqlite_database_path.exists()
 
     return {
         "ok": deepseek_key_configured and database_ready,
         "deepseek_key_configured": deepseek_key_configured,
         "database_ready": database_ready,
+        "sqlite_database_ready": sqlite_database_ready,
+        "sqlite_database_path": str(SQLITE_DATABASE_PATH),
         "missing_database_paths": missing_database_paths,
     }

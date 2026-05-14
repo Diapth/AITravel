@@ -1,6 +1,8 @@
 import os
 import json
 
+from chinatravel.environment.sqlite_store import read_dataframe, sqlite_available
+
 
 class Poi:
     def __init__(self, base_path: str = "../../database/poi/", en_version=False):
@@ -22,14 +24,25 @@ class Poi:
             os.path.join(curdir, f"{base_path}/{city}/poi.json") for city in city_list
         ]
         self.data = {}
-        for i, city in enumerate(city_list):
-            self.data[city] = json.load(open(data_path_list[i], "r", encoding="utf-8"))
-            city_data = {}
-            for name_pos in self.data[city]:
-                name = name_pos["name"]
-                pos = name_pos["position"]
-                city_data[name] = tuple(pos)
-            self.data[city] = city_data
+        if sqlite_available():
+            for city in city_list:
+                rows = read_dataframe(
+                    "SELECT name, lat, lon FROM poi WHERE city = ?",
+                    (city,),
+                )
+                self.data[city] = {
+                    row["name"]: (row["lat"], row["lon"])
+                    for _, row in rows.iterrows()
+                }
+        else:
+            for i, city in enumerate(city_list):
+                self.data[city] = json.load(open(data_path_list[i], "r", encoding="utf-8"))
+                city_data = {}
+                for name_pos in self.data[city]:
+                    name = name_pos["name"]
+                    pos = name_pos["position"]
+                    city_data[name] = tuple(pos)
+                self.data[city] = city_data
             # self.data[city] = [
             #     (x["name"], tuple(x["position"])) for x in self.data[city]
             # ]

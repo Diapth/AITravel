@@ -4,13 +4,17 @@ import heapq
 from geopy.distance import geodesic
 
 from chinatravel.environment.tools.poi.apis import Poi
+from chinatravel.environment.sqlite_store import read_json_blob, sqlite_available
 
 
 def get_lines_and_stations(city, SUBWAY_PATH):
     stations_all = []
     metro_lines = {}
-    with open(SUBWAY_PATH, "r", encoding="utf-8") as file:
-        subway_data = json.load(file)
+    if sqlite_available():
+        subway_data = read_json_blob("subways")
+    else:
+        with open(SUBWAY_PATH, "r", encoding="utf-8") as file:
+            subway_data = json.load(file)
     for line in subway_data[city]:
         metro_lines[line["name"]] = []
         for station in line["stations"]:
