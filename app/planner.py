@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import csv
+import httpx
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,8 @@ CITY_TO_DATA_DIR = {
     "成都": "chengdu",
     "重庆": "chongqing",
 }
+AMAP_PLACE_TEXT_URL = "https://restapi.amap.com/v5/place/text"
+AMAP_WEB_SERVICE_KEY_ENV = "AMAP_WEB_SERVICE_KEY"
 
 
 def _positive_timeout(value: int, default: int) -> int:
@@ -117,6 +120,83 @@ def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[s
     if request.people_number is not None:
         query["people_number"] = request.people_number
     return query
+
+
+def get_amap_web_service_key() -> str | None:
+    return get_env_value(AMAP_WEB_SERVICE_KEY_ENV) or get_env_value("VITE_AMAP_API_KEY")
+
+
+def fetch_business_district_context(target_city: str | None, limit: int = 5) -> list[dict[str, str]]:
+    if not target_city:
+        return []
+    api_key = get_amap_web_service_key()
+    if not api_key:
+        return []
+
+    params = {
+        "key": api_key,
+        "keywords": "商圈",
+        "city": target_city,
+        "city_limit": "true",
+        "show_fields": "business",
+        "page_size": limit,
+        "page_num": 1,
+    }
+    try:
+        with httpx.Client(timeout=5, follow_redirects=True) as client:
+            response = client.get(AMAP_PLACE_TEXT_URL, params=params)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:
+        return []
+
+    pois = payload.get("pois") if isinstance(payload, dict) else None
+    if not isinstance(pois, list):
+        return []
+
+    districts: list[dict[str, str]] = []
+    seen = set()
+    for poi in pois:
+        if not isinstance(poi, dict):
+            continue
+        name = str(poi.get("name") or "").strip()
+        business = str(poi.get("business_area") or poi.get("business") or "").strip()
+        district = str(poi.get("adname") or "").strip()
+        address = str(poi.get("address") or "").strip()
+        label = business or name
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        districts.append(
+            {
+                "name": name,
+                "business_area": label,
+                "district": district,
+                "address": address,
+            }
+        )
+        if len(districts) >= limit:
+            break
+    return districts
+
+
+def enrich_query_with_business_districts(query: dict[str, Any], districts: list[dict[str, str]]) -> dict[str, Any]:
+    if not districts:
+        return query
+    lines = [
+        f"{item['business_area']}（{item['district']}）"
+        for item in districts
+        if item.get("business_area")
+    ]
+    if not lines:
+        return query
+    enriched = dict(query)
+    enriched["amap_business_districts"] = districts
+    enriched["nature_language"] = (
+        f"{query['nature_language']}\n"
+        f"高德地图商圈参考：{'; '.join(lines)}。请把这些商圈作为住宿、餐饮和晚间活动的候选参考，结合预算、交通时间和用户偏好生成更优路线。"
+    )
+    return enriched
 
 
 def json_safe(value: Any) -> Any:
@@ -493,6 +573,8 @@ class ChinaTravelPlanner:
     def plan(self, request: PlanRequest) -> dict[str, Any]:
         request_id = make_request_id()
         query = build_query(request, request_id=request_id)
+        business_districts = fetch_business_district_context(request.target_city)
+        query = enrich_query_with_business_districts(query, business_districts)
         started = time.time()
         previous_request_id = os.environ.get("CHINATRAVEL_REQUEST_ID")
         os.environ["CHINATRAVEL_REQUEST_ID"] = request_id
@@ -508,16 +590,6 @@ class ChinaTravelPlanner:
 
         try:
             try:
-                if request.start_city and request.target_city and request.days and request.people_number:
-                    result = self._fallback_result(
-                        request,
-                        request_id,
-                        started,
-                        "structured_request_fast_path",
-                    )
-                    write_request_trace(request_id, "api_response.json", result)
-                    return result
-
                 agent = self._load_agent()
                 timeout_sec = get_planner_timeout_sec()
                 success, plan = func_timeout(
@@ -611,6 +683,7 @@ class ChinaTravelPlanner:
                 "agent": "LLMNeSy",
                 "llm": "deepseek",
                 "elapsed_sec": elapsed,
+                "amap_business_districts": business_districts,
             },
         }
         write_request_trace(request_id, "api_response.json", result)

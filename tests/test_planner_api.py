@@ -233,7 +233,7 @@ def test_planner_serializes_numpy_plan_and_writes_request_trace(tmp_path, monkey
     assert response_trace["plan"]["route"] == ["上海", "苏州"]
 
 
-def test_structured_request_uses_success_fallback_and_writes_trace(tmp_path, monkeypatch):
+def test_structured_request_still_uses_agent_and_writes_trace(tmp_path, monkeypatch):
     planner = ChinaTravelPlanner()
     request = PlanRequest(
         query="当前位置上海。我和女朋友想去苏州玩两天，预算1300元，请给我一个旅行规划。",
@@ -245,23 +245,66 @@ def test_structured_request_uses_success_fallback_and_writes_trace(tmp_path, mon
     )
 
     monkeypatch.setattr(planner_module, "make_request_id", lambda: "web-fast-success")
-    monkeypatch.setattr(
-        planner,
-        "_add_fallback_llm_summary",
-        lambda req, plan: plan.update({"llm_summary": "预算满足。"}),
-    )
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
     monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_ENABLED", "true")
     monkeypatch.setenv("CHINATRAVEL_LLM_TRACE_DIR", str(tmp_path))
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            query = kwargs["query"]
+            assert query["start_city"] == "上海"
+            assert query["target_city"] == "苏州"
+            assert query["days"] == 2
+            assert query["people_number"] == 2
+            return True, {
+                "start_city": query["start_city"],
+                "target_city": query["target_city"],
+                "days": query["days"],
+                "people_number": query["people_number"],
+                "total_cost": 1200,
+                "itinerary": [],
+            }
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
 
     result = planner.plan(request)
 
     assert result["success"] is True
-    assert result["meta"]["fallback"] is True
     assert result["plan"]["start_city"] == "上海"
     assert result["plan"]["target_city"] == "苏州"
     assert result["plan"]["total_cost"] <= 1300
-    assert (tmp_path / "web-fast-success" / "fallback_plan.json").exists()
+    assert result["meta"]["agent"] == "LLMNeSy"
+    assert "fallback" not in result["meta"]
+    assert not (tmp_path / "web-fast-success" / "fallback_plan.json").exists()
     assert (tmp_path / "web-fast-success" / "api_response.json").exists()
+
+
+def test_business_districts_enrich_agent_query(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="请给我规划一个苏州两日游",
+        start_city="上海",
+        target_city="苏州",
+        days=2,
+        people_number=2,
+        budget=1300,
+    )
+    districts = [{"business_area": "观前街", "district": "姑苏区", "name": "观前街", "address": ""}]
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: districts)
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            query = kwargs["query"]
+            assert query["amap_business_districts"] == districts
+            assert "高德地图商圈参考" in query["nature_language"]
+            return True, {"itinerary": [], "total_cost": 0}
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    assert result["meta"]["amap_business_districts"] == districts
 
 
 def test_request_trace_defaults_to_logs_directory(tmp_path, monkeypatch):

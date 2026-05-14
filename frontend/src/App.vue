@@ -105,47 +105,62 @@ function inferDays(payload: PlanRequest) {
 
 function createProgress(payload: PlanRequest): ProgressDay[] {
   const totalDays = inferDays(payload);
-  return Array.from({ length: totalDays }, (_, index) => ({
-    day: index + 1,
-    status: index === 0 ? "active" : "queued",
-    title: index === 0 ? "当前生成" : "等待生成",
-    detail:
-      index === 0
-        ? "DeepSeek 正在解析偏好，LLMNeSy 正在校验第 1 天路线。"
-        : `第 ${index + 1} 天将在前一天约束稳定后继续生成。`,
-  }));
+  const destination = payload.target_city || "目的地";
+  return [
+    {
+      day: 1,
+      status: "active",
+      title: "解析需求",
+      detail: `正在整理 ${destination} ${totalDays} 天游的城市、预算、人数和偏好约束。`,
+    },
+    {
+      day: 2,
+      status: "queued",
+      title: "检索交通与本地数据",
+      detail: "LLMNeSy 正在匹配车次、景点、餐饮、住宿和预算约束。",
+    },
+    {
+      day: 3,
+      status: "queued",
+      title: "生成并校验路线",
+      detail: "DeepSeek 会参考结构化表格和商圈信息，生成更优行程。",
+    },
+    {
+      day: 4,
+      status: "queued",
+      title: "等待完整结果",
+      detail: "后端返回完整 plan 后，地图、Tab、预算和时间表会一次性出现。",
+    },
+  ];
 }
 
 function advanceProgress() {
-  const currentIndex = progressDays.value.findIndex((day) => day.status === "active");
+  const currentIndex = progressDays.value.findIndex((stage) => stage.status === "active");
   if (currentIndex === -1) return;
+  const lastIndex = progressDays.value.length - 1;
 
-  progressDays.value = progressDays.value.map((day, index) => {
-    if (index < currentIndex) return { ...day, status: "done", title: "已生成" };
+  progressDays.value = progressDays.value.map((stage, index) => {
+    if (index < currentIndex) return { ...stage, status: "done" };
     if (index === currentIndex) {
       return {
-        ...day,
+        ...stage,
         status: "done",
-        title: "已生成",
-        detail: `第 ${day.day} 天行程已完成初稿，正在保留给你先阅读。`,
       };
     }
-    if (index === currentIndex + 1) {
+    if (index === currentIndex + 1 && currentIndex < lastIndex) {
       return {
-        ...day,
+        ...stage,
         status: "active",
-        title: "当前生成",
-        detail: `DeepSeek 正在补全第 ${day.day} 天，LLMNeSy 正在检查交通和预算约束。`,
       };
     }
-    return day;
+    return stage;
   });
 }
 
 function startProgress(payload: PlanRequest) {
   window.clearInterval(progressTimer);
   progressDays.value = createProgress(payload);
-  progressTimer = window.setInterval(advanceProgress, 1700);
+  progressTimer = window.setInterval(advanceProgress, 12000);
 }
 
 function stopProgress() {
@@ -181,7 +196,7 @@ async function handleSubmit(payload: PlanRequest) {
     progressDays.value = progressDays.value.map((day) => ({
       ...day,
       status: response.value?.success ? "done" : day.status,
-      title: response.value?.success ? "已生成" : day.title,
+      title: response.value?.success && day.title === "等待完整结果" ? "结果已返回" : day.title,
     }));
   }
 }

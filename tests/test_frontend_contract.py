@@ -30,6 +30,7 @@ def test_frontend_uses_vite_vue_stack():
     assert '"vue"' in package_json
     assert '"element-plus"' in package_json
     assert '"lucide-vue-next"' in package_json
+    assert '"@amap/amap-jsapi-loader"' in package_json
     assert "createApp" in main_ts
     assert "ElementPlus" in main_ts
 
@@ -38,21 +39,31 @@ def test_frontend_uses_product_workspace_layout():
     app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
     composer_vue = Path("frontend/src/components/PlannerComposer.vue").read_text(encoding="utf-8")
     results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
+    map_vue = Path("frontend/src/components/AmapRoutePanel.vue").read_text(encoding="utf-8")
 
     assert "app-header" in app_vue
     assert "composer-card" in composer_vue
     assert "result-workspace" in results_vue
     assert "summary-strip" in results_vue
+    assert "route-planner-layout" in results_vue
+    assert "AmapRoutePanel" in results_vue
+    assert "AMap.Geocoder" in map_vue
+    assert "AMap.Driving" in map_vue
+    assert "resolveDrivingSegment" in map_vue
 
 
 def test_frontend_shows_llm_generation_progress():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
     results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
 
     assert "模型生成过程" in results_vue
     assert "DeepSeek" in results_vue
     assert "LLMNeSy" in results_vue
-    assert "当前生成" in results_vue
-    assert "等待生成" in results_vue
+    assert "解析需求" in app_vue
+    assert "检索交通与本地数据" in app_vue
+    assert "等待完整结果" in app_vue
+    assert "window.setInterval(advanceProgress, 12000)" in app_vue
+    assert "第 {{ day.day }} 天" not in results_vue
 
 
 def test_frontend_adapts_flat_itinerary_response_shape():
@@ -91,11 +102,19 @@ def test_frontend_uses_compact_desktop_density():
     assert "overflow: hidden" in styles_css
     assert "flex: 1 1 auto" in styles_css
     assert "overflow-y: auto" in styles_css
-    assert "itinerary-main" in results_vue
-    assert "image-placeholder" in results_vue
-    assert "imageKeywords" in results_vue
+    assert "route-map-panel" in styles_css
+    assert "route-detail-panel" in styles_css
+    assert "buildDayRoutePoints" in results_vue
     assert "width: min(1760px" in styles_css
     assert "grid-template-columns: minmax(320px, 500px)" in styles_css
+
+
+def test_frontend_amap_env_is_documented():
+    env_text = Path(".env").read_text(encoding="utf-8")
+
+    assert "VITE_AMAP_API_KEY=91fc8915faa9ede9655b9be2d25e4f43" in env_text
+    assert "VITE_AMAP_SECURITY_CODE=3a1011379c1da036ff9d07a91e516406" in env_text
+    assert "AMAP_WEB_SERVICE_KEY=91fc8915faa9ede9655b9be2d25e4f43" in env_text
 
 
 def test_frontend_composer_uses_compact_field_grid():
@@ -112,10 +131,19 @@ def test_frontend_result_action_buttons_have_handlers():
     assert "downloadItinerary" in results_vue
     assert "shareItinerary" in results_vue
     assert "saveItinerary" in results_vue
-    assert "copyJson" in results_vue
+    assert "json-panel" not in results_vue
+    assert "copyJson" not in results_vue
     assert "localStorage.setItem" in results_vue
     assert "navigator.share" in results_vue
     assert "navigator.clipboard.writeText" in results_vue
+
+
+def test_frontend_overview_budget_sums_all_days():
+    results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
+
+    assert "sumBudgetItems" in results_vue
+    assert "itinerary.value.reduce((sum, day) => sum + budgetTotal(day), 0)" in results_vue
+    assert "预算按全部天数汇总" in results_vue
 
 
 def test_frontend_composer_controls_are_interactive():
