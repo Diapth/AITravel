@@ -77,7 +77,7 @@ def trace_llm_call(
     if not get_bool_env("CHINATRAVEL_LLM_TRACE_CONSOLE", True):
         return
 
-    console = sys.__stdout__
+    console = sys.stdout
     console.write(
         "\n"
         f"[LLM TRACE] request_id={request_id} call_id={call_id} "
