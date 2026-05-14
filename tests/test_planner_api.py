@@ -354,6 +354,51 @@ def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_ci
     assert any(activity["type"] == "accommodation" for activity in result["plan"]["itinerary"])
 
 
+def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="我想去桂林阳朔玩 4 天 3 晚，想体验漓江竹筏、遇龙河骑行和当地美食。",
+        start_city="上海",
+        target_city="桂林阳朔",
+        days=4,
+        people_number=2,
+        budget=3400,
+    )
+    searched: list[tuple[str, str]] = []
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities 上海 -> 桂林阳朔."}
+
+    class FakeAmapClient:
+        def search_pois(self, city, keywords, page_size=10):
+            searched.append((city, keywords))
+            if keywords in ("景点", "漓江竹筏", "遇龙河", "骑行", "竹筏"):
+                return [{"name": f"{city}{keywords}", "location": f"{city}-{keywords}", "business": {"cost": "0"}}]
+            if keywords in ("餐厅", "美食", "当地美食"):
+                return [{"name": f"{city}本地餐厅", "location": f"{city}-餐厅", "business": {"cost": "80"}}]
+            if keywords == "酒店":
+                return [{"name": f"{city}市区酒店", "location": f"{city}-酒店", "business": {"cost": "320"}}]
+            return []
+
+        def weather(self, city):
+            return {"lives": [{"city": city, "weather": "晴"}]}
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    assert result["meta"]["agent"] == "LLMNeSy+amap_fallback"
+    assert result["plan"]["target_cities"] == ["桂林", "阳朔"]
+    assert result["plan"]["target_city"] == "桂林、阳朔"
+    assert ("桂林", "景点") in searched
+    assert ("阳朔", "遇龙河") in searched
+    assert any(activity["city"] == "阳朔" for activity in result["plan"]["itinerary"] if activity.get("city"))
+
+
 def test_planner_reports_fallback_error_when_amap_key_cannot_be_used(monkeypatch):
     planner = ChinaTravelPlanner()
     request = PlanRequest(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import csv
@@ -59,6 +60,25 @@ CITY_TO_DATA_DIR = {
 }
 AMAP_PLACE_TEXT_URL = "https://restapi.amap.com/v5/place/text"
 AMAP_WEB_SERVICE_KEY_ENV = "AMAP_WEB_SERVICE_KEY"
+KNOWN_TRAVEL_CITY_NAMES = (
+    "北京",
+    "上海",
+    "天津",
+    "重庆",
+    "南京",
+    "苏州",
+    "杭州",
+    "武汉",
+    "广州",
+    "深圳",
+    "成都",
+    "西安",
+    "厦门",
+    "桂林",
+    "阳朔",
+    "大理",
+    "丽江",
+)
 
 
 def _positive_timeout(value: int, default: int) -> int:
@@ -125,6 +145,68 @@ def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[s
 
 def get_amap_web_service_key() -> str | None:
     return get_env_value(AMAP_WEB_SERVICE_KEY_ENV) or get_env_value("VITE_AMAP_API_KEY")
+
+
+def split_target_cities(target_city: str | None) -> list[str]:
+    if not target_city:
+        return []
+
+    normalized = re.sub(r"\s+", "", target_city.strip())
+    if not normalized:
+        return []
+
+    parts = [
+        part
+        for part in re.split(r"[,，、/|;；]+|(?:和|与|及|以及)", normalized)
+        if part
+    ]
+    if len(parts) == 1:
+        matched = [city for city in KNOWN_TRAVEL_CITY_NAMES if city in normalized]
+        if len(matched) >= 2:
+            parts = sorted(matched, key=normalized.index)
+
+    cleaned: list[str] = []
+    seen = set()
+    for part in parts:
+        city = re.sub(r"^(?:中国|广西|云南|江苏|浙江|四川|陕西|福建|广东|湖北|重庆市?)", "", part)
+        city = re.sub(r"(?:市|县|区)$", "", city).strip()
+        if city and city not in seen:
+            seen.add(city)
+            cleaned.append(city)
+    return cleaned or [normalized]
+
+
+def _poi_identity(poi: dict[str, Any]) -> tuple[str, str]:
+    name = str(poi.get("name") or "").strip()
+    location = str(poi.get("location") or "").strip()
+    return name, location
+
+
+def _dedupe_pois(pois: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen = set()
+    for poi in pois:
+        key = _poi_identity(poi)
+        if key in seen or not key[0]:
+            continue
+        seen.add(key)
+        deduped.append(poi)
+    return deduped
+
+
+def _extract_interest_keywords(query: str) -> list[str]:
+    candidates = [
+        "漓江竹筏",
+        "遇龙河",
+        "十里画廊",
+        "西街",
+        "当地美食",
+        "美食",
+        "骑行",
+        "竹筏",
+        "休闲",
+    ]
+    return [keyword for keyword in candidates if keyword in query]
 
 
 def fetch_business_district_context(target_city: str | None, limit: int = 5) -> list[dict[str, str]]:
@@ -577,15 +659,41 @@ class ChinaTravelPlanner:
         budget = request.budget or 0
         client = AmapDemoClient()
 
-        attractions = client.search_pois(request.target_city, "景点", page_size=8)
-        restaurants = client.search_pois(request.target_city, "餐厅", page_size=8)
-        hotels = client.search_pois(request.target_city, "酒店", page_size=5)
-        weather = client.weather(request.target_city)
+        target_cities = split_target_cities(request.target_city) or [request.target_city]
+        primary_city = target_cities[0]
+        destination_label = "、".join(target_cities)
+        interest_keywords = _extract_interest_keywords(request.query)
+
+        attractions: list[dict[str, Any]] = []
+        restaurants: list[dict[str, Any]] = []
+        hotels: list[dict[str, Any]] = []
+        search_errors: list[str] = []
+        for city in target_cities:
+            for keyword in ["景点", *interest_keywords]:
+                try:
+                    attractions.extend(client.search_pois(city, keyword, page_size=8))
+                except Exception as exc:
+                    search_errors.append(f"{city}/{keyword}: {exc}")
+            for keyword in ["餐厅", "美食", "当地美食"]:
+                try:
+                    restaurants.extend(client.search_pois(city, keyword, page_size=8))
+                except Exception as exc:
+                    search_errors.append(f"{city}/{keyword}: {exc}")
+            try:
+                hotels.extend(client.search_pois(city, "酒店", page_size=5))
+            except Exception as exc:
+                search_errors.append(f"{city}/酒店: {exc}")
+
+        attractions = _dedupe_pois(attractions)
+        restaurants = _dedupe_pois(restaurants)
+        hotels = _dedupe_pois(hotels)
 
         if len(attractions) < 2:
-            raise ValueError("AMap fallback requires at least two attraction POIs")
+            detail = f"; search_errors={search_errors}" if search_errors else ""
+            raise ValueError(f"AMap fallback requires at least two attraction POIs{detail}")
 
-        hotel = hotels[0] if hotels else {"name": f"{request.target_city}市区酒店"}
+        weather = client.weather(primary_city)
+        hotel = hotels[0] if hotels else {"name": f"{primary_city}市区酒店"}
         itinerary: list[dict[str, Any]] = []
         total_cost = 0.0
 
@@ -598,14 +706,14 @@ class ChinaTravelPlanner:
         hotel_cost = _poi_cost(hotel, 350)
         meal_cost = 80.0 * people_number
         start_station = f"{request.start_city}站"
-        target_station = f"{request.target_city}站"
+        target_station = f"{primary_city}站"
 
         add(
             {
                 "day": 1,
                 "type": "intercity_reference",
                 "start": request.start_city,
-                "end": request.target_city,
+                "end": destination_label,
                 "position": f"{start_station} → {target_station}",
                 "start_time": "上午",
                 "end_time": "中午",
@@ -616,14 +724,15 @@ class ChinaTravelPlanner:
 
         for index in range(days):
             attraction = attractions[index % len(attractions)]
-            restaurant = restaurants[index % len(restaurants)] if restaurants else {"name": f"{request.target_city}本地餐厅"}
+            city = target_cities[index % len(target_cities)]
+            restaurant = restaurants[index % len(restaurants)] if restaurants else {"name": f"{city}本地餐厅"}
             day = index + 1
             add(
                 {
                     "day": day,
                     "type": "attraction",
-                    "position": _poi_name(attraction, f"{request.target_city}景点"),
-                    "city": request.target_city,
+                    "position": _poi_name(attraction, f"{city}景点"),
+                    "city": city,
                     "start_time": "09:30",
                     "end_time": "11:30",
                     "cost": _poi_cost(attraction, 0) * people_number,
@@ -634,8 +743,8 @@ class ChinaTravelPlanner:
                 {
                     "day": day,
                     "type": "restaurant",
-                    "position": _poi_name(restaurant, f"{request.target_city}餐厅"),
-                    "city": request.target_city,
+                    "position": _poi_name(restaurant, f"{city}餐厅"),
+                    "city": city,
                     "start_time": "12:00",
                     "end_time": "13:00",
                     "cost": _poi_cost(restaurant, meal_cost) * people_number,
@@ -647,8 +756,8 @@ class ChinaTravelPlanner:
                 {
                     "day": day,
                     "type": "attraction",
-                    "position": _poi_name(next_attraction, f"{request.target_city}景点"),
-                    "city": request.target_city,
+                    "position": _poi_name(next_attraction, f"{city}景点"),
+                    "city": city,
                     "start_time": "14:30",
                     "end_time": "16:30",
                     "cost": _poi_cost(next_attraction, 0) * people_number,
@@ -660,8 +769,8 @@ class ChinaTravelPlanner:
                     {
                         "day": day,
                         "type": "accommodation",
-                        "position": _poi_name(hotel, f"{request.target_city}市区酒店"),
-                        "city": request.target_city,
+                        "position": _poi_name(hotel, f"{primary_city}市区酒店"),
+                        "city": primary_city,
                         "start_time": "20:00",
                         "end_time": "次日 08:30",
                         "rooms": 1,
@@ -674,7 +783,7 @@ class ChinaTravelPlanner:
             {
                 "day": days,
                 "type": "intercity_reference",
-                "start": request.target_city,
+                "start": destination_label,
                 "end": request.start_city,
                 "position": f"{target_station} → {start_station}",
                 "start_time": "傍晚",
@@ -687,7 +796,8 @@ class ChinaTravelPlanner:
         plan = {
             "people_number": people_number,
             "start_city": request.start_city,
-            "target_city": request.target_city,
+            "target_city": destination_label,
+            "target_cities": target_cities,
             "days": days,
             "budget": budget,
             "total_cost": round(total_cost, 2),
@@ -698,6 +808,7 @@ class ChinaTravelPlanner:
                 "used": True,
                 "reason": fallback_reason,
                 "source": "amap",
+                "search_errors": search_errors,
                 "note": "本地数据库覆盖不足时使用高德实时 POI、酒店、餐饮和天气生成。",
             },
         }
