@@ -225,7 +225,13 @@ function submit() {
         </div>
       </el-form-item>
 
-      <button class="ai-fill-action" type="button" :disabled="disabled || isExtracting || !form.query.trim()" @click="extractFields">
+      <button
+        class="ai-fill-action"
+        :class="{ 'is-loading': isExtracting }"
+        type="button"
+        :disabled="disabled || isExtracting || !form.query.trim()"
+        @click="extractFields"
+      >
         <span class="button-spinner" aria-hidden="true" />
         <WandSparkles :size="17" />
         <span>{{ isExtracting ? "正在整理字段" : "一键整理下方字段" }}</span>
@@ -318,7 +324,7 @@ function submit() {
         </div>
       </div>
 
-      <button class="primary-action" type="submit" :disabled="disabled || !form.query.trim()">
+      <button class="primary-action" :class="{ 'is-loading': disabled }" type="submit" :disabled="disabled || !form.query.trim()">
         <span class="button-spinner" aria-hidden="true" />
         <Sparkles :size="20" />
         <span>{{ disabled ? "模型生成中" : "生成行程" }}</span>

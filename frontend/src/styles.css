@@ -634,11 +634,11 @@ h2 {
   opacity: 0.68;
 }
 
-.ai-fill-action:disabled .button-spinner {
+.ai-fill-action.is-loading .button-spinner {
   display: inline-block;
   border-color: rgba(11, 118, 95, 0.24);
   border-top-color: var(--jade);
-  animation: spin 760ms linear infinite;
+  animation: button-spin 760ms linear infinite;
 }
 
 .composer-inline-feedback {
@@ -686,14 +686,16 @@ button:disabled {
   display: none;
   width: 18px;
   height: 18px;
+  flex: 0 0 auto;
   border: 2px solid rgba(255, 255, 255, 0.45);
   border-top-color: #ffffff;
   border-radius: 50%;
+  will-change: transform;
 }
 
-.primary-action:disabled .button-spinner {
+.primary-action.is-loading .button-spinner {
   display: inline-block;
-  animation: spin 760ms linear infinite;
+  animation: button-spin 760ms linear infinite;
 }
 
 .composer-footnote {
@@ -829,8 +831,28 @@ button:disabled {
 }
 
 .generation-panel {
+  position: relative;
+  overflow: hidden;
   padding: 12px;
   margin-bottom: 14px;
+}
+
+.generation-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 42%;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #e67f34, var(--jade), transparent);
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.generation-panel:has(.generation-pulse.active)::before {
+  animation: progress-sweep 1.7s ease-in-out infinite;
+  opacity: 1;
 }
 
 .generation-head {
@@ -871,6 +893,8 @@ button:disabled {
 .generation-pulse.active {
   background: #fff4e8;
   color: #a05a18;
+  box-shadow: 0 0 0 0 rgba(230, 127, 52, 0.28);
+  animation: pulse-ring 1.35s ease-out infinite;
 }
 
 .progress-days {
@@ -912,6 +936,7 @@ button:disabled {
 
 .progress-day.is-active {
   border-color: rgba(230, 127, 52, 0.38);
+  box-shadow: 0 8px 20px rgba(230, 127, 52, 0.12);
 }
 
 .progress-day.is-active .progress-icon {
@@ -1733,12 +1758,39 @@ button:disabled {
 }
 
 .spin-icon {
-  animation: spin 900ms linear infinite;
+  transform-origin: center;
+  animation: icon-spin 900ms linear infinite;
+  will-change: transform;
 }
 
-@keyframes spin {
+@keyframes button-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes icon-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes progress-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(245%);
+  }
+}
+
+@keyframes pulse-ring {
+  70% {
+    box-shadow: 0 0 0 8px rgba(230, 127, 52, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 127, 52, 0);
   }
 }
 
