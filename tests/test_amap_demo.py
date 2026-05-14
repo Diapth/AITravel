@@ -54,6 +54,29 @@ def test_amap_demo_weather_reports_missing_key(monkeypatch):
     assert payload["error"]["code"] == "AMAP_KEY_MISSING"
 
 
+def test_amap_demo_explains_jsapi_key_platform_mismatch(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "0", "infocode": "10009", "info": "USERKEY_PLAT_NOMATCH"}
+
+    def fake_get(self, url, params):
+        return FakeResponse()
+
+    monkeypatch.setattr(amap_demo.httpx.Client, "get", fake_get)
+
+    try:
+        amap_demo.AmapDemoClient(api_key="jsapi-key").weather("南京")
+    except amap_demo.AmapDemoError as exc:
+        response = amap_demo.amap_demo_error(exc)
+
+    assert response["success"] is False
+    assert response["error"]["code"] == "AMAP_RESPONSE_ERROR"
+    assert "Web Service" in response["error"]["message"]
+
+
 def test_amap_demo_does_not_block_plan_when_amap_fails(monkeypatch):
     monkeypatch.setattr(
         "app.main.check_runtime",

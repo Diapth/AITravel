@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from app.amap_demo import AmapDemoClient
 from numpy import floating, integer, ndarray
 
 from app.runtime_checks import PROJECT_ROOT, get_deepseek_api_key
@@ -347,6 +348,19 @@ def _pick_restaurants(project_root: Path, target_city: str, count: int) -> list[
     return sorted(rows, key=lambda row: _float(row.get("price")))[:count]
 
 
+def _poi_name(poi: dict[str, Any], fallback: str) -> str:
+    return str(poi.get("name") or fallback).strip()
+
+
+def _poi_cost(poi: dict[str, Any], default: float) -> float:
+    business = poi.get("business") if isinstance(poi.get("business"), dict) else {}
+    for value in (business.get("cost"), poi.get("cost"), poi.get("price")):
+        cost = _float(value, -1)
+        if cost >= 0:
+            return cost
+    return default
+
+
 class ChinaTravelPlanner:
     def __init__(self, project_root: Path = PROJECT_ROOT):
         self.project_root = project_root
@@ -549,6 +563,148 @@ class ChinaTravelPlanner:
         except Exception as exc:
             plan["llm_summary_error"] = str(exc)
 
+    def _build_amap_fallback_plan(
+        self,
+        request: PlanRequest,
+        request_id: str,
+        fallback_reason: str,
+    ) -> dict[str, Any]:
+        if not request.start_city or not request.target_city:
+            raise ValueError("AMap fallback planner requires start_city and target_city")
+
+        days = request.days or 3
+        people_number = request.people_number or 1
+        budget = request.budget or 0
+        client = AmapDemoClient()
+
+        attractions = client.search_pois(request.target_city, "景点", page_size=8)
+        restaurants = client.search_pois(request.target_city, "餐厅", page_size=8)
+        hotels = client.search_pois(request.target_city, "酒店", page_size=5)
+        weather = client.weather(request.target_city)
+
+        if len(attractions) < 2:
+            raise ValueError("AMap fallback requires at least two attraction POIs")
+
+        hotel = hotels[0] if hotels else {"name": f"{request.target_city}市区酒店"}
+        itinerary: list[dict[str, Any]] = []
+        total_cost = 0.0
+
+        def add(activity: dict[str, Any]) -> None:
+            nonlocal total_cost
+            activity["cost"] = round(_float(activity.get("cost")), 2)
+            total_cost += activity["cost"]
+            itinerary.append(activity)
+
+        hotel_cost = _poi_cost(hotel, 350)
+        meal_cost = 80.0 * people_number
+        start_station = f"{request.start_city}站"
+        target_station = f"{request.target_city}站"
+
+        add(
+            {
+                "day": 1,
+                "type": "intercity_reference",
+                "start": request.start_city,
+                "end": request.target_city,
+                "position": f"{start_station} → {target_station}",
+                "start_time": "上午",
+                "end_time": "中午",
+                "cost": 0,
+                "note": "高德 fallback 不查询实时火车/航班票务，请按实际车次补充。",
+            }
+        )
+
+        for index in range(days):
+            attraction = attractions[index % len(attractions)]
+            restaurant = restaurants[index % len(restaurants)] if restaurants else {"name": f"{request.target_city}本地餐厅"}
+            day = index + 1
+            add(
+                {
+                    "day": day,
+                    "type": "attraction",
+                    "position": _poi_name(attraction, f"{request.target_city}景点"),
+                    "city": request.target_city,
+                    "start_time": "09:30",
+                    "end_time": "11:30",
+                    "cost": _poi_cost(attraction, 0) * people_number,
+                    "amap_poi": attraction,
+                }
+            )
+            add(
+                {
+                    "day": day,
+                    "type": "restaurant",
+                    "position": _poi_name(restaurant, f"{request.target_city}餐厅"),
+                    "city": request.target_city,
+                    "start_time": "12:00",
+                    "end_time": "13:00",
+                    "cost": _poi_cost(restaurant, meal_cost) * people_number,
+                    "amap_poi": restaurant,
+                }
+            )
+            next_attraction = attractions[(index + 1) % len(attractions)]
+            add(
+                {
+                    "day": day,
+                    "type": "attraction",
+                    "position": _poi_name(next_attraction, f"{request.target_city}景点"),
+                    "city": request.target_city,
+                    "start_time": "14:30",
+                    "end_time": "16:30",
+                    "cost": _poi_cost(next_attraction, 0) * people_number,
+                    "amap_poi": next_attraction,
+                }
+            )
+            if day < days:
+                add(
+                    {
+                        "day": day,
+                        "type": "accommodation",
+                        "position": _poi_name(hotel, f"{request.target_city}市区酒店"),
+                        "city": request.target_city,
+                        "start_time": "20:00",
+                        "end_time": "次日 08:30",
+                        "rooms": 1,
+                        "cost": hotel_cost,
+                        "amap_poi": hotel,
+                    }
+                )
+
+        add(
+            {
+                "day": days,
+                "type": "intercity_reference",
+                "start": request.target_city,
+                "end": request.start_city,
+                "position": f"{target_station} → {start_station}",
+                "start_time": "傍晚",
+                "end_time": "晚上",
+                "cost": 0,
+                "note": "高德 fallback 不查询实时火车/航班票务，请按实际车次补充。",
+            }
+        )
+
+        plan = {
+            "people_number": people_number,
+            "start_city": request.start_city,
+            "target_city": request.target_city,
+            "days": days,
+            "budget": budget,
+            "total_cost": round(total_cost, 2),
+            "remaining_budget": round(budget - total_cost, 2) if budget else None,
+            "weather": weather,
+            "itinerary": itinerary,
+            "fallback": {
+                "used": True,
+                "reason": fallback_reason,
+                "source": "amap",
+                "note": "本地数据库覆盖不足时使用高德实时 POI、酒店、餐饮和天气生成。",
+            },
+        }
+        self._add_fallback_llm_summary(request, plan)
+        write_request_trace(request_id, "amap_fallback_plan.json", plan)
+        return plan
+
     def _fallback_result(
         self,
         request: PlanRequest,
@@ -569,6 +725,38 @@ class ChinaTravelPlanner:
                 "fallback_reason": fallback_reason,
             },
         }
+
+    def _best_effort_fallback_result(
+        self,
+        request: PlanRequest,
+        request_id: str,
+        started: float,
+        fallback_reason: str,
+    ) -> dict[str, Any]:
+        fallback_errors: list[str] = []
+        try:
+            return self._fallback_result(request, request_id, started, fallback_reason)
+        except Exception as exc:
+            fallback_errors.append(f"local_database: {exc}")
+
+        try:
+            plan = self._build_amap_fallback_plan(request, request_id, fallback_reason)
+            return {
+                "success": True,
+                "plan": json_safe(plan),
+                "meta": {
+                    "request_id": request_id,
+                    "agent": "LLMNeSy+amap_fallback",
+                    "llm": "deepseek",
+                    "elapsed_sec": time.time() - started,
+                    "fallback": True,
+                    "fallback_reason": fallback_reason,
+                    "fallback_errors": fallback_errors,
+                },
+            }
+        except Exception as exc:
+            fallback_errors.append(f"amap: {exc}")
+            raise RuntimeError("; ".join(fallback_errors)) from exc
 
     def plan(self, request: PlanRequest) -> dict[str, Any]:
         request_id = make_request_id()
@@ -624,9 +812,9 @@ class ChinaTravelPlanner:
                 },
             }
             try:
-                result = self._fallback_result(request, request_id, started, "llmnesy_timeout")
-            except Exception:
-                pass
+                result = self._best_effort_fallback_result(request, request_id, started, "llmnesy_timeout")
+            except Exception as fallback_exc:
+                result["meta"]["fallback_error"] = str(fallback_exc)
             write_request_trace(request_id, "api_response.json", result)
             return result
         except Exception as exc:
@@ -644,9 +832,9 @@ class ChinaTravelPlanner:
                 },
             }
             try:
-                result = self._fallback_result(request, request_id, started, f"llmnesy_failed: {exc}")
-            except Exception:
-                pass
+                result = self._best_effort_fallback_result(request, request_id, started, f"llmnesy_failed: {exc}")
+            except Exception as fallback_exc:
+                result["meta"]["fallback_error"] = str(fallback_exc)
             write_request_trace(request_id, "api_response.json", result)
             return result
 
@@ -669,9 +857,9 @@ class ChinaTravelPlanner:
                 },
             }
             try:
-                result = self._fallback_result(request, request_id, started, "llmnesy_no_plan")
-            except Exception:
-                pass
+                result = self._best_effort_fallback_result(request, request_id, started, "llmnesy_no_plan")
+            except Exception as fallback_exc:
+                result["meta"]["fallback_error"] = str(fallback_exc)
             write_request_trace(request_id, "api_response.json", result)
             return result
 

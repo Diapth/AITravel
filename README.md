@@ -166,6 +166,10 @@ python -m chinatravel.data.build_sqlite
 AMAP_WEB_SERVICE_KEY=你的高德 Web 服务 Key
 ```
 
+注意：这里必须是高德开放平台的 Web 服务 Key。前端 `VITE_AMAP_API_KEY`
+如果只开通 JSAPI，会在后端 Web Service 请求中返回 `USERKEY_PLAT_NOMATCH`，
+此时超出本地库的城市无法使用高德 fallback 生成行程。
+
 可用 demo 接口：
 
 ```text

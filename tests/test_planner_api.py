@@ -307,6 +307,83 @@ def test_business_districts_enrich_agent_query(monkeypatch):
     assert result["meta"]["amap_business_districts"] == districts
 
 
+def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_city(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="请规划天津到南京三天两夜游",
+        start_city="天津",
+        target_city="南京",
+        days=3,
+        people_number=1,
+        budget=3000,
+    )
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities 天津 -> 南京."}
+
+    class FakeAmapClient:
+        def search_pois(self, city, keywords, page_size=10):
+            if keywords == "景点":
+                return [
+                    {"name": "中山陵园风景区", "business": {"cost": "0"}},
+                    {"name": "夫子庙秦淮风光带", "business": {"cost": "0"}},
+                    {"name": "南京博物院", "business": {"cost": "0"}},
+                ]
+            if keywords == "餐厅":
+                return [{"name": "南京大牌档", "business": {"cost": "90"}}]
+            if keywords == "酒店":
+                return [{"name": "南京新街口酒店", "business": {"cost": "360"}}]
+            return []
+
+        def weather(self, city):
+            return {"lives": [{"city": city, "weather": "晴"}]}
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    assert result["success"] is True
+    assert result["meta"]["agent"] == "LLMNeSy+amap_fallback"
+    assert result["plan"]["fallback"]["source"] == "amap"
+    assert result["plan"]["start_city"] == "天津"
+    assert result["plan"]["target_city"] == "南京"
+    assert result["plan"]["weather"]["lives"][0]["weather"] == "晴"
+    assert any(activity["type"] == "accommodation" for activity in result["plan"]["itinerary"])
+
+
+def test_planner_reports_fallback_error_when_amap_key_cannot_be_used(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="请规划天津到南京三天两夜游",
+        start_city="天津",
+        target_city="南京",
+        days=3,
+        people_number=1,
+        budget=3000,
+    )
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities 天津 -> 南京."}
+
+    class BrokenAmapClient:
+        def search_pois(self, *args, **kwargs):
+            raise RuntimeError("USERKEY_PLAT_NOMATCH")
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: BrokenAmapClient())
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    assert result["success"] is False
+    assert "fallback_error" in result["meta"]
+    assert "USERKEY_PLAT_NOMATCH" in result["meta"]["fallback_error"]
+
+
 def test_request_trace_defaults_to_logs_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_module, "PROJECT_ROOT", tmp_path)
     monkeypatch.delenv("CHINATRAVEL_LLM_TRACE_DIR", raising=False)

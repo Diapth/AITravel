@@ -63,9 +63,15 @@ class AmapDemoClient:
         status = str(payload.get("status", "1"))
         infocode = str(payload.get("infocode", ""))
         if status != "1" or infocode not in ("", "10000"):
+            message = str(payload.get("info") or "AMap request failed.")
+            if infocode == "10009" or message == "USERKEY_PLAT_NOMATCH":
+                message = (
+                    "AMap key platform mismatch: configure a Web Service "
+                    "AMAP_WEB_SERVICE_KEY instead of a JSAPI-only frontend key."
+                )
             raise AmapDemoError(
                 "AMAP_RESPONSE_ERROR",
-                str(payload.get("info") or "高德接口返回失败。"),
+                message,
                 {"infocode": infocode},
             )
         return payload
@@ -79,7 +85,7 @@ class AmapDemoClient:
                 "city_limit": "true",
                 "page_size": max(1, min(page_size, 25)),
                 "page_num": 1,
-                "show_fields": "business,photos",
+                "show_fields": "business,photos,cost",
             },
         )
         pois = payload.get("pois")
