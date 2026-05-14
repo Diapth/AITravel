@@ -4,6 +4,25 @@ from app import amap_demo
 from app.main import app
 
 
+def test_amap_demo_prefers_web_service_key_from_env_file(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "AMAP_WEB_SERVICE_KEY=web-service-key",
+                "VITE_AMAP_API_KEY=jsapi-key",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("chinatravel.config.DEFAULT_ENV_FILE", env_file)
+    monkeypatch.setattr(amap_demo, "DEFAULT_ENV_FILE", env_file, raising=False)
+    monkeypatch.setenv("AMAP_WEB_SERVICE_KEY", "stale-jsapi-key")
+    monkeypatch.setenv("VITE_AMAP_API_KEY", "jsapi-key")
+
+    assert amap_demo.get_amap_key() == "web-service-key"
+
+
 def test_amap_demo_pois_uses_amap_client(monkeypatch):
     captured = {}
 

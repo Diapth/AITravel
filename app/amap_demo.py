@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from chinatravel.config import get_env_value
+from chinatravel.config import get_env_file_value, get_env_value
 
 
 AMAP_KEY_ENV = "AMAP_WEB_SERVICE_KEY"
@@ -26,7 +26,7 @@ class AmapDemoError(Exception):
 
 
 def get_amap_key() -> str | None:
-    return get_env_value(AMAP_KEY_ENV) or get_env_value("VITE_AMAP_API_KEY")
+    return get_env_file_value(AMAP_KEY_ENV) or get_env_value(AMAP_KEY_ENV)
 
 
 def amap_demo_response(data: Any, source: str = "amap") -> dict[str, Any]:

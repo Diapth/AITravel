@@ -19,7 +19,7 @@ from numpy import floating, integer, ndarray
 from app.runtime_checks import PROJECT_ROOT, get_deepseek_api_key
 from app.schemas import PlanRequest
 from chinatravel.agent.utils import decode_numpy_dict
-from chinatravel.config import get_bool_env, get_env_value, get_int_env
+from chinatravel.config import get_bool_env, get_env_file_value, get_env_value, get_int_env
 
 try:
     from func_timeout import FunctionTimedOut, func_timeout
@@ -220,7 +220,7 @@ def build_query(request: PlanRequest, request_id: str = "web-request") -> dict[s
 
 
 def get_amap_web_service_key() -> str | None:
-    return get_env_value(AMAP_WEB_SERVICE_KEY_ENV) or get_env_value("VITE_AMAP_API_KEY")
+    return get_env_file_value(AMAP_WEB_SERVICE_KEY_ENV) or get_env_value(AMAP_WEB_SERVICE_KEY_ENV)
 
 
 def split_target_cities(target_city: str | None) -> list[str]:
