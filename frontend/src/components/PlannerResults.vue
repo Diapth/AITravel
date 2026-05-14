@@ -149,8 +149,13 @@ const displayLocationText = computed(() => {
   return locations.join(" / ") || plan.value?.target_city || props.payload?.target_city || "目的地";
 });
 const accommodationText = computed(() => {
-  if (selectedTab.value !== "overview") return selectedDay.value?.accommodation || "推荐商圈附近";
-  const accommodations = Array.from(new Set(itinerary.value.map((day) => day.accommodation).filter(Boolean)));
+  const hotelNames = (day?: PlanDay) =>
+    (day?.activities || [])
+      .filter((activity) => activity.type === "accommodation")
+      .map((activity) => activity.position || activity.title)
+      .filter(Boolean);
+  if (selectedTab.value !== "overview") return hotelNames(selectedDay.value).join(" / ") || selectedDay.value?.accommodation || "推荐商圈附近";
+  const accommodations = Array.from(new Set(itinerary.value.flatMap((day) => [...hotelNames(day), day.accommodation]).filter(Boolean)));
   return accommodations.join(" / ") || "推荐商圈附近";
 });
 
@@ -224,7 +229,7 @@ function activityMeta(activity: PlanActivity) {
     activityTypeLabel(activity.type),
     activity.TrainID,
     activity.transportation,
-    activity.price !== undefined ? `单价 ¥${activity.price}` : undefined,
+    activity.price !== undefined ? `${activity.price_source === "estimate" ? "估算" : "单价"} ¥${activity.price}` : undefined,
     activity.tickets ? `${activity.tickets} 张票` : undefined,
     activity.rooms ? `${activity.rooms} 间房` : undefined,
   ].filter(Boolean);

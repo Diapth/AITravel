@@ -519,6 +519,45 @@ def _poi_cost(poi: dict[str, Any], default: float) -> float:
     return default
 
 
+def _poi_has_explicit_cost(poi: dict[str, Any]) -> bool:
+    business = poi.get("business") if isinstance(poi.get("business"), dict) else {}
+    for value in (business.get("cost"), poi.get("cost"), poi.get("price")):
+        if _float(value, -1) >= 0:
+            return True
+    return False
+
+
+def _poi_rating(poi: dict[str, Any]) -> float:
+    business = poi.get("business") if isinstance(poi.get("business"), dict) else {}
+    return _float(business.get("rating"), 0)
+
+
+def _hotel_matches_city(poi: dict[str, Any], city: str) -> bool:
+    name = str(poi.get("name") or "")
+    address = str(poi.get("address") or "")
+    adname = str(poi.get("adname") or "")
+    if city in {adname, adname.removesuffix("区").removesuffix("县").removesuffix("市")}:
+        return True
+    return city in name or city in address
+
+
+def _select_hotel_for_city(hotels: list[dict[str, Any]], city: str) -> dict[str, Any]:
+    city_hotels = [hotel for hotel in hotels if _hotel_matches_city(hotel, city)]
+    candidates = city_hotels or hotels
+    if not candidates:
+        return {"name": f"{city}市区酒店"}
+    if not city_hotels and len(hotels) > 1:
+        for hotel in hotels:
+            if not any(other_city in str(hotel.get("name") or "") for other_city in KNOWN_TRAVEL_CITY_NAMES if other_city != city):
+                candidates = [hotel]
+                break
+    return sorted(
+        candidates,
+        key=lambda hotel: (_poi_has_explicit_cost(hotel), _poi_rating(hotel)),
+        reverse=True,
+    )[0]
+
+
 class ChinaTravelPlanner:
     def __init__(self, project_root: Path = PROJECT_ROOT):
         self.project_root = project_root
@@ -758,6 +797,8 @@ class ChinaTravelPlanner:
                     search_errors.append(f"{city}/{keyword}: {exc}")
             try:
                 hotels.extend(client.search_pois(city, "酒店", page_size=5))
+                hotels.extend(client.search_pois(city, f"{city}酒店", page_size=5))
+                hotels.extend(client.search_pois(city, "住宿", page_size=5))
             except Exception as exc:
                 search_errors.append(f"{city}/酒店: {exc}")
 
@@ -770,7 +811,6 @@ class ChinaTravelPlanner:
             raise ValueError(f"AMap fallback requires at least two attraction POIs{detail}")
 
         weather = client.weather(primary_city)
-        hotel = hotels[0] if hotels else {"name": f"{primary_city}市区酒店"}
         itinerary: list[dict[str, Any]] = []
         total_cost = 0.0
 
@@ -780,7 +820,6 @@ class ChinaTravelPlanner:
             total_cost += activity["cost"]
             itinerary.append(activity)
 
-        hotel_cost = _poi_cost(hotel, 350)
         meal_cost = 80.0 * people_number
         start_station = f"{request.start_city}站"
         target_station = f"{primary_city}站"
@@ -842,14 +881,20 @@ class ChinaTravelPlanner:
                 }
             )
             if day < days:
+                hotel_city = target_cities[min(index, len(target_cities) - 1)]
+                hotel = _select_hotel_for_city(hotels, hotel_city)
+                hotel_cost = _poi_cost(hotel, 350)
+                hotel_cost_source = "amap" if _poi_has_explicit_cost(hotel) else "estimate"
                 add(
                     {
                         "day": day,
                         "type": "accommodation",
-                        "position": _poi_name(hotel, f"{primary_city}市区酒店"),
-                        "city": primary_city,
+                        "position": _poi_name(hotel, f"{hotel_city}市区酒店"),
+                        "city": hotel_city,
                         "start_time": "20:00",
                         "end_time": "次日 08:30",
+                        "price": hotel_cost,
+                        "price_source": hotel_cost_source,
                         "rooms": 1,
                         "cost": hotel_cost,
                         "amap_poi": hotel,

@@ -23,6 +23,7 @@ export interface PlanActivity {
   position?: string;
   transportation?: string;
   price?: number | string;
+  price_source?: string;
   tickets?: number;
   rooms?: number;
   cost?: number | string;

@@ -379,6 +379,8 @@ def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_ci
                 return [{"name": "南京大牌档", "business": {"cost": "90"}}]
             if keywords == "酒店":
                 return [{"name": "南京新街口酒店", "business": {"cost": "360"}}]
+            if keywords in ("南京酒店", "住宿"):
+                return []
             return []
 
         def weather(self, city):
@@ -396,7 +398,10 @@ def test_planner_uses_amap_fallback_when_local_database_fallback_cannot_cover_ci
     assert result["plan"]["start_city"] == "天津"
     assert result["plan"]["target_city"] == "南京"
     assert result["plan"]["weather"]["lives"][0]["weather"] == "晴"
-    assert any(activity["type"] == "accommodation" for activity in result["plan"]["itinerary"])
+    accommodation = next(activity for activity in result["plan"]["itinerary"] if activity["type"] == "accommodation")
+    assert accommodation["position"] == "南京新街口酒店"
+    assert accommodation["price"] == 360
+    assert accommodation["price_source"] == "amap"
 
 
 def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
@@ -423,7 +428,9 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
             if keywords in ("餐厅", "美食", "当地美食"):
                 return [{"name": f"{city}本地餐厅", "location": f"{city}-餐厅", "business": {"cost": "80"}}]
             if keywords == "酒店":
-                return [{"name": f"{city}市区酒店", "location": f"{city}-酒店", "business": {"cost": "320"}}]
+                return [{"name": f"{city}市区酒店", "location": f"{city}-酒店", "business": {"rating": "4.8"}}]
+            if keywords in (f"{city}酒店", "住宿"):
+                return []
             return []
 
         def weather(self, city):
@@ -442,6 +449,9 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
     assert ("桂林", "景点") in searched
     assert ("阳朔", "遇龙河") in searched
     assert any(activity["city"] == "阳朔" for activity in result["plan"]["itinerary"] if activity.get("city"))
+    accommodation = next(activity for activity in result["plan"]["itinerary"] if activity["type"] == "accommodation")
+    assert accommodation["position"] == "桂林市区酒店"
+    assert accommodation["price_source"] == "estimate"
 
 
 def test_planner_reports_fallback_error_when_amap_key_cannot_be_used(monkeypatch):
