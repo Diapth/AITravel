@@ -32,6 +32,8 @@ def test_check_runtime_accepts_deepseek_key_and_database(tmp_path, monkeypatch):
     assert status["ok"] is True
     assert status["deepseek_key_configured"] is True
     assert status["database_ready"] is True
+    assert status["sqlite_database_ready"] is False
+    assert status["sqlite_database_path"] == str(Path("chinatravel/environment/database/chinatravel.sqlite"))
     assert status["missing_database_paths"] == []
 
 

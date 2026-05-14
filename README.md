@@ -139,6 +139,44 @@ curl http://127.0.0.1:8000/api/health
 
 ## API
 
+## SQLite 与高德实时数据
+
+本地 CSV/JSON 仍保留为源数据，运行时优先使用轻量 SQLite 文件：
+
+```text
+chinatravel/environment/database/chinatravel.sqlite
+```
+
+如需从源数据重建 SQLite：
+
+```bash
+python -m chinatravel.data.build_sqlite
+```
+
+当前数据边界：
+
+- 长期稳定数据：景点快照、POI 坐标、地铁结构、火车和航班快照继续保存在本地 SQLite。
+- 高频变化数据：餐厅、酒店、市内路线、天气优先通过高德 demo 接口验证实时查询能力。
+- 火车和航班暂不接实时票务 API，仍使用本地快照。
+- `POST /api/plan` 暂不直接依赖高德 demo，避免影响现有 LLMNeSy 主链路。
+
+高德 demo 需要在 `.env` 中配置：
+
+```env
+AMAP_WEB_SERVICE_KEY=你的高德 Web 服务 Key
+```
+
+可用 demo 接口：
+
+```text
+GET /api/amap-demo/pois?city=苏州&keywords=餐厅
+GET /api/amap-demo/hotels?city=苏州&keywords=酒店
+GET /api/amap-demo/route?origin=120.1,31.1&destination=120.2,31.2&mode=driving
+GET /api/amap-demo/weather?city=苏州
+```
+
+高德 demo 响应统一包含 `success`、`data`、`source`，失败时额外返回 `error`。参考能力来自高德 POI 搜索、路径规划和天气查询 Web 服务。
+
 `POST /api/plan`
 
 ```json
