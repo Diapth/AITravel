@@ -113,8 +113,11 @@ def test_frontend_uses_compact_desktop_density():
     assert "route-map-panel" in styles_css
     assert "route-detail-panel" in styles_css
     assert "buildDayRoutePoints" in results_vue
-    assert "width: min(1760px" in styles_css
-    assert "grid-template-columns: minmax(320px, 500px)" in styles_css
+    assert "width: min(1880px" in styles_css
+    assert "grid-template-columns: minmax(300px, 450px)" in styles_css
+    assert "route-content-grid" in styles_css
+    assert "route-intel-panel" in styles_css
+    assert "minmax(280px, 0.58fr)" in styles_css
 
 
 def test_frontend_amap_env_is_documented():
@@ -132,6 +135,16 @@ def test_frontend_composer_uses_compact_field_grid():
 
     assert "compact-control-grid" in composer_vue
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in styles_css
+
+
+def test_frontend_composer_splits_joined_known_target_cities():
+    composer_vue = Path("frontend/src/components/PlannerComposer.vue").read_text(encoding="utf-8")
+
+    assert "knownTravelCityNames" in composer_vue
+    assert '"桂林"' in composer_vue
+    assert '"阳朔"' in composer_vue
+    assert "normalized.includes(city)" in composer_vue
+    assert "normalized.indexOf(left) - normalized.indexOf(right)" in composer_vue
 
 
 def test_frontend_result_action_buttons_have_handlers():
@@ -153,6 +166,39 @@ def test_frontend_overview_budget_sums_all_days():
     assert "sumBudgetItems" in results_vue
     assert "itinerary.value.reduce((sum, day) => sum + budgetTotal(day), 0)" in results_vue
     assert "预算按全部天数汇总" in results_vue
+    assert 'ref<number | "overview">("overview")' in results_vue
+
+
+def test_frontend_shows_realtime_guides_and_spot_detail():
+    results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
+    map_vue = Path("frontend/src/components/AmapRoutePanel.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+
+    assert "RealtimeEvidence" in planner_ts
+    assert "realtimeEvidence" in results_vue
+    assert "热门攻略" in results_vue
+    assert "activePlaceGuide" in results_vue
+    assert "handleMapPointSelect" in results_vue
+    assert "focusActivePoint" in map_vue
+    assert "setZoomAndCenter(15" in map_vue
+
+
+def test_frontend_exposes_realtime_toggle_dates_and_validation_dialog():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    composer_vue = Path("frontend/src/components/PlannerComposer.vue").read_text(encoding="utf-8")
+    results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+
+    assert ':runtime-health="runtimeHealth"' in app_vue
+    assert "use_realtime" in planner_ts
+    assert "realtime-control" in composer_vue
+    assert "TAVILY_REAL_TIME_ENABLED=true" in composer_vue
+    assert "defaultDepartureDate" in composer_vue
+    assert "defaultReturnDate" in composer_vue
+    assert "validateForm" in composer_vue
+    assert "validation-dialog" in composer_vue
+    assert "tabDateLabel" in results_vue
+    assert "dayDateText" in results_vue
 
 
 def test_frontend_composer_controls_are_interactive():
