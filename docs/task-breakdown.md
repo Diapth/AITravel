@@ -240,11 +240,11 @@ python -m pytest tests/test_conversation_api.py -q
   - `archive_conversation()`
   - `restore_conversation()`
   - `restore_version()`
-- [ ] 扩展 API：
+- [x] 扩展 API：
   - `POST /api/conversations/{conversation_id}/archive`
   - `POST /api/conversations/{conversation_id}/restore`
   - `POST /api/conversations/{conversation_id}/versions/{version_id}/restore`
-- [ ] 行为约束：
+- [x] 行为约束：
   - 归档只改 `conversations.status = archived`。
   - 恢复只改回 `active`。
   - 回退创建 `source = "rollback"` 的新版本，不删除旧版本。

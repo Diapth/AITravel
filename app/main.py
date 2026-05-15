@@ -148,6 +148,70 @@ def get_conversation(conversation_id: str) -> ConversationDetailResponse:
 
 
 @app.post(
+    "/api/conversations/{conversation_id}/archive",
+    response_model=ConversationDetailResponse,
+    response_model_exclude_none=True,
+)
+def archive_conversation(conversation_id: str) -> ConversationDetailResponse:
+    store = TravelMemoryStore()
+    try:
+        store.archive_conversation(conversation_id)
+    except ValueError:
+        return ConversationDetailResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    return _conversation_detail_response(store, conversation_id)
+
+
+@app.post(
+    "/api/conversations/{conversation_id}/restore",
+    response_model=ConversationDetailResponse,
+    response_model_exclude_none=True,
+)
+def restore_conversation(conversation_id: str) -> ConversationDetailResponse:
+    store = TravelMemoryStore()
+    try:
+        store.restore_conversation(conversation_id)
+    except ValueError:
+        return ConversationDetailResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    return _conversation_detail_response(store, conversation_id)
+
+
+@app.post(
+    "/api/conversations/{conversation_id}/versions/{version_id}/restore",
+    response_model=ConversationMessageResponse,
+    response_model_exclude_none=True,
+)
+def restore_plan_version(conversation_id: str, version_id: str) -> ConversationMessageResponse:
+    store = TravelMemoryStore()
+    try:
+        version = store.restore_version(conversation_id, version_id)
+    except ValueError as exc:
+        return ConversationMessageResponse(
+            success=False,
+            error=ErrorPayload(code="VERSION_RESTORE_FAILED", message=str(exc)),
+        )
+    assistant_message = store.append_message(
+        conversation_id,
+        "assistant",
+        f"已回退并生成第 {version['version_number']} 版行程。",
+        plan_version_id=version["id"],
+    )
+    detail = store.get_conversation(conversation_id)
+    return ConversationMessageResponse(
+        success=True,
+        conversation=detail["conversation"] if detail else None,
+        assistant_message=assistant_message,
+        version=version,
+        current_plan=detail["current_plan"] if detail else None,
+    )
+
+
+@app.post(
     "/api/conversations/{conversation_id}/messages",
     response_model=ConversationMessageResponse,
     response_model_exclude_none=True,

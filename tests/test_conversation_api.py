@@ -73,6 +73,38 @@ def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
     assert detail_response.json()["current_plan"]["target_city"] == "苏州"
 
 
+def test_conversation_api_archive_restore_and_rollback(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+
+    class FakePlanner:
+        def plan(self, request):
+            return {
+                "success": True,
+                "plan": {"target_city": "桂林", "itinerary": [], "total_cost": 1800},
+                "meta": {"request_id": "web-rollback"},
+            }
+
+    monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
+    client = TestClient(app)
+    created = client.post("/api/conversations", json={"message": "桂林三日游"}).json()
+
+    conversation_id = created["conversation"]["id"]
+    version_id = created["versions"][0]["id"]
+
+    archive_response = client.post(f"/api/conversations/{conversation_id}/archive")
+    restore_response = client.post(f"/api/conversations/{conversation_id}/restore")
+    rollback_response = client.post(f"/api/conversations/{conversation_id}/versions/{version_id}/restore")
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["conversation"]["status"] == "archived"
+    assert restore_response.status_code == 200
+    assert restore_response.json()["conversation"]["status"] == "active"
+    assert rollback_response.status_code == 200
+    assert rollback_response.json()["version"]["source"] == "rollback"
+    assert rollback_response.json()["version"]["version_number"] == 2
+
+
 def test_conversation_message_generates_first_plan_when_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
