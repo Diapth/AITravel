@@ -314,7 +314,7 @@ python -m pytest tests/test_travel_memory.py tests/test_conversation_api.py -q
 
 ## M4：前端双状态工作台
 
-目标：把前端升级为“首次进入聊天生成 / 已有行程工作台”两种状态，匹配 UI 原型。
+目标：把前端升级为“首次进入意图澄清对话 / 已有行程工作台”两种状态，匹配 UI 原型。首屏不是直接生成行程，而是让用户先和 AI 讨论想去哪里、旅行偏好、预算、时间和同行人群；只有当用户明确要求生成，或系统判断已收集到足够旅行信息后，才进入规划清单确认与生成流程。
 
 ### M4.1：服务层与应用状态机
 
@@ -392,7 +392,7 @@ npm run build
 
 任务：
 
-- [ ] 修改 `frontend/src/styles.css`：
+- [x] 修改 `frontend/src/styles.css`：
   - 延续温润纸色、瓷白面板、玉绿色主按钮、朱砂/琥珀风险提示、紧凑工作台风格。
   - 桌面空态三列：历史 / 聊天 / 推荐。
   - 桌面行程态两列：对话版本栏 / 行程工作区。
@@ -418,9 +418,60 @@ python -m pytest tests/test_frontend_contract.py -q
 npm run build
 ```
 
+### M4.5：首屏对话澄清与生成确认门槛
+
+目标：修正首屏产品语义。用户在第一步主要是“发送消息给 AI”，而不是点击后立即生成完整行程；系统通过多轮对话帮助用户明确想去的地方和旅行方式，再用结构化清单承接生成动作。
+
+任务：
+
+- [x] 修改 `TravelChatPanel.vue` 首屏动作语义：
+  - 输入框右下角按钮文案从 `生成行程` 改为 `发送`。
+  - 首屏提示改为“和 AI 描述你想去哪、想玩什么、预算和时间还不确定也可以”。
+  - 示例问题偏向意图探索，例如“我想找一个 4 天放松的山水目的地”“预算中等，想少走路，多吃当地菜”。
+- [x] 新增首屏对话收集状态：
+  - 记录 AI 已识别字段：目的地候选、出发地、日期或天数、人数、预算、偏好、节奏、禁忌。
+  - 区分 `信息不足`、`可以生成`、`用户强制生成` 三种状态。
+  - 信息不足时 assistant 继续追问，而不是创建 plan version。
+- [x] 新增“规划清单确认”表单消息：
+  - 当信息足够或用户明确要求生成时，assistant 先发送结构化清单卡片。
+  - 用户可在卡片内主动填写或编辑目的地、天数、预算、人数、偏好、节奏。
+  - 用户确认后才调用生成行程 API。
+- [x] 新增“生成完成卡片”：
+  - 行程生成完成后，聊天区出现完成卡片，而不是直接跳转。
+  - 卡片展示标题、目的地、天数、预算摘要、版本号。
+  - 卡片主操作为 `查看并编辑规划`，点击后进入 `plan_workspace`。
+- [x] 调整后端 conversation 行为：
+  - `POST /api/conversations` 只创建对话和保存首条用户消息，不默认调用 `get_planner().plan()`。
+  - 新增或扩展接口用于“确认规划清单后生成第 1 版行程”。
+  - 保留旧 `/api/plan` 合同不变，用于兼容一次性生成。
+- [x] 补充合同测试：
+  - 首屏按钮包含 `发送`，不包含直接 `生成行程` 主按钮。
+  - 信息不足时不会创建 `plan_versions`。
+  - 确认清单后才创建 `source = "ai_generated"` 的第 1 版。
+  - 生成完成后返回可点击进入 workspace 的卡片状态。
+
+涉及文件：
+
+- `app/main.py`
+- `app/schemas.py`
+- `app/travel_memory.py`
+- `frontend/src/App.vue`
+- `frontend/src/components/TravelChatPanel.vue`
+- `frontend/src/components/PlanWorkspace.vue`
+- `frontend/src/services/planner.ts`
+- `tests/test_conversation_api.py`
+- `tests/test_frontend_contract.py`
+
+验收命令：
+
+```bash
+python -m pytest tests/test_conversation_api.py tests/test_frontend_contract.py -q
+npm run build
+```
+
 ## M5：AI 修改、手动编辑与版本冲突
 
-目标：在最小工作台稳定后，再加入可变更当前行程的能力。先做 AI 修改，再做直接编辑器。
+目标：在最小工作台稳定、且 M4.5 的“对话澄清 -> 清单确认 -> 生成完成卡片 -> 进入工作区”流程成立后，再加入可变更当前行程的能力。先做 AI 修改，再做直接编辑器。
 
 ### M5.1：自然语言继续修改
 

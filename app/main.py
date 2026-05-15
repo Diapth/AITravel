@@ -12,6 +12,7 @@ from app.runtime_checks import check_runtime
 from app.schemas import (
     ConversationCreateRequest,
     ConversationDetailResponse,
+    ConversationGenerateRequest,
     ConversationListResponse,
     ConversationMessageRequest,
     ConversationMessageResponse,
@@ -67,11 +68,11 @@ def _request_id_from_meta(meta: dict | None) -> str | None:
 def _generate_first_version(
     store: TravelMemoryStore,
     conversation_id: str,
-    user_message: str,
+    request: PlanRequest,
     *,
     user_message_row: dict | None = None,
 ) -> ConversationMessageResponse:
-    planner_result = get_planner().plan(PlanRequest(query=user_message))
+    planner_result = get_planner().plan(request)
     if not planner_result.get("success") or not isinstance(planner_result.get("plan"), dict):
         detail = store.get_conversation(conversation_id)
         return ConversationMessageResponse(
@@ -144,24 +145,16 @@ def open_recommended_plan(recommendation_id: str) -> ConversationDetailResponse:
     return ConversationDetailResponse(success=True, **detail)
 
 
-@app.post("/api/conversations", response_model=ConversationDetailResponse, response_model_exclude_none=True)
+@app.post("/api/conversations", response_model=ConversationDetailResponse)
 def create_conversation(request: ConversationCreateRequest) -> ConversationDetailResponse:
-    runtime_status = check_runtime()
-    if not runtime_status["ok"]:
-        return ConversationDetailResponse(
-            success=False,
-            error=ErrorPayload(
-                code="RUNTIME_NOT_READY",
-                message="DeepSeek key 或旅行数据库未配置完成。",
-                details=runtime_status,
-            ),
-        )
     store = TravelMemoryStore()
     conversation = store.create_conversation(title=_conversation_title(request.message))
-    user_message = store.append_message(conversation["id"], "user", request.message)
-    generated = _generate_first_version(store, conversation["id"], request.message, user_message_row=user_message)
-    if not generated.success:
-        return _conversation_detail_response(store, conversation["id"])
+    store.append_message(conversation["id"], "user", request.message)
+    store.append_message(
+        conversation["id"],
+        "assistant",
+        "我先帮你梳理旅行需求。可以继续告诉我出发地、天数、预算、同行人和想要的节奏；信息够了以后，我会给你一张规划清单确认卡。",
+    )
     return _conversation_detail_response(store, conversation["id"])
 
 
@@ -237,9 +230,45 @@ def restore_plan_version(conversation_id: str, version_id: str) -> ConversationM
 @app.post(
     "/api/conversations/{conversation_id}/messages",
     response_model=ConversationMessageResponse,
-    response_model_exclude_none=True,
 )
 def append_conversation_message(conversation_id: str, request: ConversationMessageRequest) -> ConversationMessageResponse:
+    store = TravelMemoryStore()
+    detail = store.get_conversation(conversation_id)
+    if detail is None:
+        return ConversationMessageResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    user_message = store.append_message(conversation_id, "user", request.message)
+    if detail["conversation"]["current_version_id"]:
+        updated = store.get_conversation(conversation_id)
+        return ConversationMessageResponse(
+            success=False,
+            conversation=updated["conversation"] if updated else None,
+            message=user_message,
+            error=ErrorPayload(code="AI_EDIT_NOT_IMPLEMENTED", message="已有行程的继续修改将在后续版本开放。"),
+        )
+    assistant_message = store.append_message(
+        conversation_id,
+        "assistant",
+        "收到。我会先把这些信息放进规划清单；如果还不确定，可以继续补充目的地、日期、预算或旅行节奏。",
+    )
+    updated = store.get_conversation(conversation_id)
+    return ConversationMessageResponse(
+        success=True,
+        conversation=updated["conversation"] if updated else None,
+        message=user_message,
+        assistant_message=assistant_message,
+        current_plan=None,
+    )
+
+
+@app.post(
+    "/api/conversations/{conversation_id}/generate",
+    response_model=ConversationMessageResponse,
+    response_model_exclude_none=True,
+)
+def generate_conversation_plan(conversation_id: str, request: ConversationGenerateRequest) -> ConversationMessageResponse:
     runtime_status = check_runtime()
     if not runtime_status["ok"]:
         return ConversationMessageResponse(
@@ -257,16 +286,14 @@ def append_conversation_message(conversation_id: str, request: ConversationMessa
             success=False,
             error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
         )
-    user_message = store.append_message(conversation_id, "user", request.message)
     if detail["conversation"]["current_version_id"]:
-        updated = store.get_conversation(conversation_id)
         return ConversationMessageResponse(
             success=False,
-            conversation=updated["conversation"] if updated else None,
-            message=user_message,
-            error=ErrorPayload(code="AI_EDIT_NOT_IMPLEMENTED", message="已有行程的继续修改将在后续版本开放。"),
+            conversation=detail["conversation"],
+            current_plan=detail["current_plan"],
+            error=ErrorPayload(code="PLAN_ALREADY_GENERATED", message="当前会话已经生成行程，可进入工作区继续修改。"),
         )
-    return _generate_first_version(store, conversation_id, request.message, user_message_row=user_message)
+    return _generate_first_version(store, conversation_id, request.to_plan_request())
 
 
 @app.post("/api/extract-fields", response_model=FieldExtractionResponse, response_model_exclude_none=True)

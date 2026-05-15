@@ -137,6 +137,78 @@ class ConversationMessageRequest(BaseModel):
         return value
 
 
+class ConversationGenerateRequest(BaseModel):
+    query: str = Field(..., description="确认后的旅行规划需求")
+    start_city: str | None = None
+    target_city: str | None = None
+    target_cities: list[str] = Field(default_factory=list)
+    departure_date: date | None = None
+    return_date: date | None = None
+    days: int | None = Field(default=None, ge=1, le=30)
+    people_number: int | None = Field(default=None, ge=1, le=50)
+    budget: int | None = Field(default=None, ge=1)
+    use_realtime: bool | None = None
+
+    @field_validator("query")
+    @classmethod
+    def query_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("query must not be blank")
+        return value
+
+    @field_validator("start_city", "target_city")
+    @classmethod
+    def empty_optional_text_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @field_validator("target_cities", mode="before")
+    @classmethod
+    def normalize_target_cities(cls, value: Any) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            items = [value]
+        else:
+            items = list(value)
+        cleaned: list[str] = []
+        seen = set()
+        for item in items:
+            city = str(item).strip()
+            if city and city not in seen:
+                seen.add(city)
+                cleaned.append(city)
+        return cleaned
+
+    @model_validator(mode="after")
+    def normalize_destination_and_dates(self) -> "ConversationGenerateRequest":
+        if self.target_cities and not self.target_city:
+            self.target_city = "、".join(self.target_cities)
+        if self.departure_date and self.return_date:
+            if self.return_date < self.departure_date:
+                raise ValueError("return_date must not be earlier than departure_date")
+            if self.days is None:
+                self.days = (self.return_date - self.departure_date).days + 1
+        return self
+
+    def to_plan_request(self) -> PlanRequest:
+        return PlanRequest(
+            query=self.query,
+            start_city=self.start_city,
+            target_city=self.target_city,
+            target_cities=self.target_cities,
+            departure_date=self.departure_date,
+            return_date=self.return_date,
+            days=self.days,
+            people_number=self.people_number,
+            budget=self.budget,
+            use_realtime=self.use_realtime,
+        )
+
+
 class ConversationSummary(BaseModel):
     id: str
     title: str

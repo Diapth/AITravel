@@ -20,6 +20,7 @@ import TravelChatPanel from "./components/TravelChatPanel.vue";
 import {
   archiveConversation,
   createConversation,
+  generateConversationPlan,
   openRecommendedPlan,
   requestConversationDetail,
   requestConversations,
@@ -31,6 +32,7 @@ import {
   saveManualPlanEdit,
   sendConversationMessage,
   type ConversationDetailResponse,
+  type ConversationGenerateRequest,
   type ConversationMessage,
   type ConversationSummary,
   type PlanRequest,
@@ -42,6 +44,7 @@ import {
 } from "./services/planner";
 
 type AppMode = "empty_chat" | "plan_workspace";
+type MobilePanel = "history" | "chat" | "recommendations" | "versions" | "plan";
 
 interface ProgressDay {
   day: number;
@@ -74,9 +77,40 @@ const isRecommendationLoading = ref(false);
 const isChatBusy = ref(false);
 const chatErrorMessage = ref("");
 const workspaceNotice = ref("");
+const planningChecklist = ref<ConversationGenerateRequest>({ query: "" });
+const checklistVisible = ref(false);
+const generatedPlanCard = ref<{
+  title: string;
+  destination: string;
+  days?: number | null;
+  budget?: number | null;
+  versionNumber?: number | null;
+} | null>(null);
+const isChecklistGenerating = ref(false);
+const mobilePanel = ref<MobilePanel>("chat");
 let progressTimer: number | undefined;
 
 const currentVersionId = computed(() => currentConversation.value?.current_version_id || null);
+
+const mobileTabs = computed<Array<{ id: MobilePanel; label: string }>>(() =>
+  appMode.value === "empty_chat"
+    ? [
+        { id: "history", label: "历史" },
+        { id: "chat", label: "聊天" },
+        { id: "recommendations", label: "推荐" },
+      ]
+    : [
+        { id: "history", label: "历史" },
+        { id: "chat", label: "聊天" },
+        { id: "versions", label: "版本" },
+        { id: "plan", label: "行程" },
+      ],
+);
+
+const checklistReady = computed(() => {
+  const checklist = planningChecklist.value;
+  return Boolean((checklist.target_city || checklist.target_cities?.length) && checklist.days && (checklist.budget || checklist.people_number));
+});
 
 const statusLabel = computed(() => {
   if (isGenerating.value || isChatBusy.value) return "生成中";
@@ -211,6 +245,70 @@ function stopProgress() {
   progressTimer = undefined;
 }
 
+function inferChecklistFromMessages(items: ConversationMessage[]): ConversationGenerateRequest {
+  const text = items.map((item) => item.content).join(" ");
+  const daysMatch = text.match(/(\d+)\s*(天|日)/);
+  const peopleMatch = text.match(/(\d+)\s*(个人|人|位)/);
+  const budgetMatch = text.match(/(?:预算|人均|总预算)[^\d]*(\d{3,6})|(\d{3,6})\s*(元|块)/);
+  const knownCities = [
+    "北京",
+    "上海",
+    "苏州",
+    "杭州",
+    "成都",
+    "重庆",
+    "桂林",
+    "阳朔",
+    "广州",
+    "深圳",
+    "西安",
+    "南京",
+    "厦门",
+    "青岛",
+    "大理",
+    "丽江",
+  ];
+  const targetCities = knownCities.filter((city) => text.includes(city));
+  const target_city = targetCities.length ? targetCities.join("、") : planningChecklist.value.target_city;
+
+  return {
+    ...planningChecklist.value,
+    query: planningChecklist.value.query || items.find((item) => item.role === "user")?.content || text || "",
+    target_city,
+    target_cities: targetCities.length ? targetCities : planningChecklist.value.target_cities,
+    days: planningChecklist.value.days || (daysMatch ? Number(daysMatch[1]) : undefined),
+    people_number: planningChecklist.value.people_number || (peopleMatch ? Number(peopleMatch[1]) : undefined),
+    budget: planningChecklist.value.budget || (budgetMatch ? Number(budgetMatch[1] || budgetMatch[2]) : undefined),
+  };
+}
+
+function shouldShowChecklist(message: string, items: ConversationMessage[]) {
+  const text = `${items.map((item) => item.content).join(" ")} ${message}`;
+  const wantsGenerate = /生成|做一版|出一版|规划|攻略|行程/.test(text);
+  const hasDestination = /北京|上海|苏州|杭州|成都|重庆|桂林|阳朔|广州|深圳|西安|南京|厦门|青岛|大理|丽江/.test(text);
+  const hasDays = /\d+\s*(天|日)/.test(text);
+  const hasBudgetOrPeople = /预算|人均|总预算|\d+\s*(个人|人|位)/.test(text);
+  return wantsGenerate || (hasDestination && hasDays && hasBudgetOrPeople);
+}
+
+function updateChecklist(field: keyof ConversationGenerateRequest, value: string | number | boolean | string[] | null) {
+  planningChecklist.value = {
+    ...planningChecklist.value,
+    [field]: value || undefined,
+  };
+}
+
+function completionCardFromPlan(versionNumber?: number | null) {
+  if (!currentConversation.value || !currentPlan.value) return null;
+  return {
+    title: currentConversation.value.title,
+    destination: currentPlan.value.target_city || currentPlan.value.target_cities?.join("、") || "待确认目的地",
+    days: currentPlan.value.days,
+    budget: currentPlan.value.budget || currentPlan.value.total_cost,
+    versionNumber,
+  };
+}
+
 function applyConversationDetail(detail: ConversationDetailResponse) {
   if (!detail.success) {
     chatErrorMessage.value = detail.error?.message || "会话读取失败，请稍后重试。";
@@ -234,7 +332,16 @@ function applyConversationDetail(detail: ConversationDetailResponse) {
         budget: detail.current_plan.budget,
       }
     : null;
-  appMode.value = detail.current_plan ? "plan_workspace" : "empty_chat";
+  if (detail.current_plan) {
+    appMode.value = "plan_workspace";
+    checklistVisible.value = false;
+    generatedPlanCard.value = null;
+    mobilePanel.value = "plan";
+  } else {
+    appMode.value = "empty_chat";
+    planningChecklist.value = inferChecklistFromMessages(detail.messages || []);
+    mobilePanel.value = "chat";
+  }
 }
 
 async function refreshConversationList() {
@@ -302,8 +409,8 @@ async function handleSubmit(payload: PlanRequest) {
 async function handleChatMessage(message: string) {
   chatErrorMessage.value = "";
   workspaceNotice.value = "";
+  generatedPlanCard.value = null;
   isChatBusy.value = true;
-  startProgress({ query: message });
   try {
     const detail = currentConversation.value
       ? await sendConversationMessage(currentConversation.value.id, message, { base_version_id: currentConversation.value.current_version_id })
@@ -321,9 +428,41 @@ async function handleChatMessage(message: string) {
       const refreshed = await requestConversationDetail(currentConversation.value.id);
       applyConversationDetail(refreshed);
     }
+    planningChecklist.value = inferChecklistFromMessages(messages.value);
+    checklistVisible.value = shouldShowChecklist(message, messages.value);
+    appMode.value = "empty_chat";
+    mobilePanel.value = "chat";
     await refreshConversationList();
   } finally {
     isChatBusy.value = false;
+  }
+}
+
+async function handleConfirmGenerate() {
+  if (!currentConversation.value) return;
+  chatErrorMessage.value = "";
+  generatedPlanCard.value = null;
+  isChecklistGenerating.value = true;
+  const payload = {
+    ...planningChecklist.value,
+    query: planningChecklist.value.query || currentConversation.value.title,
+  };
+  startProgress(payload);
+  try {
+    const data = await generateConversationPlan(currentConversation.value.id, payload);
+    if (!data.success) {
+      chatErrorMessage.value = data.error?.message || "生成攻略失败，请稍后重试。";
+      return;
+    }
+    const refreshed = await requestConversationDetail(currentConversation.value.id);
+    applyConversationDetail(refreshed);
+    generatedPlanCard.value = completionCardFromPlan(data.version?.version_number);
+    appMode.value = "empty_chat";
+    mobilePanel.value = "chat";
+    checklistVisible.value = false;
+    await refreshConversationList();
+  } finally {
+    isChecklistGenerating.value = false;
     stopProgress();
     progressDays.value = progressDays.value.map((day) => ({
       ...day,
@@ -331,6 +470,12 @@ async function handleChatMessage(message: string) {
       title: currentPlan.value && day.title === "等待完整结果" ? "结果已返回" : day.title,
     }));
   }
+}
+
+function handleOpenGeneratedPlan() {
+  if (!currentPlan.value) return;
+  appMode.value = "plan_workspace";
+  mobilePanel.value = "plan";
 }
 
 async function handleSelectConversation(conversationId: string) {
@@ -483,8 +628,22 @@ onBeforeUnmount(stopProgress);
       />
     </section>
 
+    <nav class="mobile-workbench-tabs" aria-label="移动端工作台切换">
+      <button
+        v-for="tab in mobileTabs"
+        :key="tab.id"
+        type="button"
+        :class="{ active: mobilePanel === tab.id }"
+        @click="mobilePanel = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+
     <section v-if="appMode === 'empty_chat'" class="conversation-workbench empty-chat" aria-label="empty_chat">
       <ConversationSidebar
+        class="mobile-panel mobile-panel-history"
+        :class="{ active: mobilePanel === 'history' }"
         :conversations="conversations"
         :current-conversation-id="currentConversation?.id"
         :loading="isConversationLoading"
@@ -494,13 +653,25 @@ onBeforeUnmount(stopProgress);
         @restore-conversation="handleRestoreConversation"
       />
       <TravelChatPanel
+        class="mobile-panel mobile-panel-chat"
+        :class="{ active: mobilePanel === 'chat' }"
         mode="empty_chat"
         :messages="messages"
         :busy="isChatBusy"
+        :generating-plan="isChecklistGenerating"
         :error-message="chatErrorMessage"
+        :planning-checklist="planningChecklist"
+        :checklist-visible="checklistVisible"
+        :checklist-ready="checklistReady"
+        :generated-card="generatedPlanCard"
         @send-message="handleChatMessage"
+        @update-checklist="updateChecklist"
+        @confirm-generate="handleConfirmGenerate"
+        @open-generated-plan="handleOpenGeneratedPlan"
       />
       <RecommendedPlans
+        class="mobile-panel mobile-panel-recommendations"
+        :class="{ active: mobilePanel === 'recommendations' }"
         :recommendations="recommendedPlans"
         :loading="isRecommendationLoading"
         @open-recommendation="handleOpenRecommendation"
@@ -508,8 +679,13 @@ onBeforeUnmount(stopProgress);
     </section>
 
     <section v-else class="conversation-workbench plan-workspace-grid" aria-label="plan_workspace">
-      <div class="workspace-left-rail">
+      <div
+        class="workspace-left-rail mobile-workspace-left"
+        :class="{ active: mobilePanel === 'history' || mobilePanel === 'chat' || mobilePanel === 'versions' }"
+      >
         <ConversationSidebar
+          class="mobile-panel mobile-panel-history"
+          :class="{ active: mobilePanel === 'history' }"
           :conversations="conversations"
           :current-conversation-id="currentConversation?.id"
           :loading="isConversationLoading"
@@ -519,6 +695,8 @@ onBeforeUnmount(stopProgress);
           @restore-conversation="handleRestoreConversation"
         />
         <TravelChatPanel
+          class="mobile-panel mobile-panel-chat"
+          :class="{ active: mobilePanel === 'chat' }"
           mode="plan_workspace"
           :messages="messages"
           :busy="isChatBusy"
@@ -526,6 +704,8 @@ onBeforeUnmount(stopProgress);
           @send-message="handleChatMessage"
         />
         <PlanVersionTimeline
+          class="mobile-panel mobile-panel-versions"
+          :class="{ active: mobilePanel === 'versions' }"
           :versions="versions"
           :current-version-id="currentVersionId"
           :busy="isChatBusy"
@@ -533,6 +713,8 @@ onBeforeUnmount(stopProgress);
         />
       </div>
       <PlanWorkspace
+        class="mobile-panel mobile-panel-plan"
+        :class="{ active: mobilePanel === 'plan' }"
         :conversation="currentConversation"
         :current-plan="currentPlan"
         :save-message="workspaceNotice"

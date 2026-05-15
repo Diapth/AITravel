@@ -12,13 +12,32 @@ def _runtime_ready():
     }
 
 
-def test_conversation_api_creates_conversation_with_first_plan(tmp_path, monkeypatch):
+def test_conversation_api_creates_conversation_without_first_plan(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    client = TestClient(app)
+
+    response = client.post("/api/conversations", json={"message": "我想去桂林阳朔玩 4 天"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["current_plan"] is None
+    assert data["versions"] == []
+    assert data["conversation"]["current_version_id"] is None
+    assert data["messages"][0]["role"] == "user"
+    assert data["messages"][1]["role"] == "assistant"
+    assert "规划清单确认卡" in data["messages"][1]["content"]
+
+
+def test_conversation_generate_creates_first_plan_after_confirmation(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
 
     class FakePlanner:
         def plan(self, request):
-            assert request.query == "我想去桂林阳朔玩 4 天"
+            assert request.query == "桂林阳朔轻松 4 天 3 晚"
+            assert request.target_cities == ["桂林", "阳朔"]
+            assert request.days == 4
             return {
                 "success": True,
                 "plan": {
@@ -34,17 +53,26 @@ def test_conversation_api_creates_conversation_with_first_plan(tmp_path, monkeyp
 
     monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
     client = TestClient(app)
+    created = client.post("/api/conversations", json={"message": "想找一个山水目的地，四天轻松一点"}).json()
 
-    response = client.post("/api/conversations", json={"message": "我想去桂林阳朔玩 4 天"})
+    response = client.post(
+        f"/api/conversations/{created['conversation']['id']}/generate",
+        json={
+            "query": "桂林阳朔轻松 4 天 3 晚",
+            "target_cities": ["桂林", "阳朔"],
+            "days": 4,
+            "people_number": 2,
+            "budget": 3400,
+        },
+    )
 
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
     assert data["current_plan"]["target_city"] == "桂林、阳朔"
-    assert data["conversation"]["current_version_id"] == data["versions"][0]["id"]
-    assert data["messages"][0]["role"] == "user"
-    assert data["messages"][1]["role"] == "assistant"
-    assert data["versions"][0]["source"] == "ai_generated"
+    assert data["conversation"]["current_version_id"] == data["version"]["id"]
+    assert data["version"]["source"] == "ai_generated"
+    assert data["version"]["version_number"] == 1
 
 
 def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
@@ -62,6 +90,10 @@ def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
     monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
     client = TestClient(app)
     created = client.post("/api/conversations", json={"message": "苏州两日游"}).json()
+    client.post(
+        f"/api/conversations/{created['conversation']['id']}/generate",
+        json={"query": "苏州两日游", "target_city": "苏州", "days": 2},
+    )
 
     list_response = client.get("/api/conversations")
     detail_response = client.get(f"/api/conversations/{created['conversation']['id']}")
@@ -88,9 +120,13 @@ def test_conversation_api_archive_restore_and_rollback(tmp_path, monkeypatch):
     monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
     client = TestClient(app)
     created = client.post("/api/conversations", json={"message": "桂林三日游"}).json()
+    generated = client.post(
+        f"/api/conversations/{created['conversation']['id']}/generate",
+        json={"query": "桂林三日游", "target_city": "桂林", "days": 3},
+    ).json()
 
     conversation_id = created["conversation"]["id"]
-    version_id = created["versions"][0]["id"]
+    version_id = generated["version"]["id"]
 
     archive_response = client.post(f"/api/conversations/{conversation_id}/archive")
     restore_response = client.post(f"/api/conversations/{conversation_id}/restore")
@@ -105,19 +141,9 @@ def test_conversation_api_archive_restore_and_rollback(tmp_path, monkeypatch):
     assert rollback_response.json()["version"]["version_number"] == 2
 
 
-def test_conversation_message_generates_first_plan_when_empty(tmp_path, monkeypatch):
+def test_conversation_message_keeps_clarifying_when_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
-
-    class FakePlanner:
-        def plan(self, request):
-            return {
-                "success": True,
-                "plan": {"target_city": "成都", "itinerary": [], "total_cost": 1200},
-                "meta": {"request_id": "web-message"},
-            }
-
-    monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
     client = TestClient(app)
     from app.travel_memory import TravelMemoryStore
 
@@ -127,8 +153,10 @@ def test_conversation_message_generates_first_plan_when_empty(tmp_path, monkeypa
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    assert data["current_plan"]["target_city"] == "成都"
-    assert data["version"]["version_number"] == 1
+    assert data["current_plan"] is None
+    assert data.get("version") is None
+    assert data["message"]["role"] == "user"
+    assert data["assistant_message"]["role"] == "assistant"
 
 
 def test_recommended_plans_return_static_fallback_and_open(tmp_path, monkeypatch):

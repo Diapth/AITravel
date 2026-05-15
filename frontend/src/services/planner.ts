@@ -11,6 +11,8 @@ export interface PlanRequest {
   use_realtime?: boolean;
 }
 
+export interface ConversationGenerateRequest extends PlanRequest {}
+
 export interface PlanActivity {
   day?: number;
   start_time?: string;
@@ -313,6 +315,18 @@ export async function sendConversationMessage(
     }),
   });
   return parseApiResponse<ConversationMessageResponse>(response, "发送修改要求失败，请稍后重试。");
+}
+
+export async function generateConversationPlan(
+  conversationId: string,
+  payload: ConversationGenerateRequest,
+): Promise<ConversationMessageResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseApiResponse<ConversationMessageResponse>(response, "确认清单并生成行程失败，请稍后重试。");
 }
 
 export async function restorePlanVersion(conversationId: string, versionId: string): Promise<ConversationMessageResponse> {

@@ -239,6 +239,7 @@ def test_frontend_conversation_workbench_contract():
         "createConversation",
         "requestConversationDetail",
         "sendConversationMessage",
+        "generateConversationPlan",
         "restorePlanVersion",
         "saveManualPlanEdit",
         "archiveConversation",
@@ -256,6 +257,30 @@ def test_frontend_conversation_workbench_contract():
     assert "PlanWorkspace" in app_vue
     assert "conversation-workbench empty-chat" in app_vue
     assert "conversation-workbench plan-workspace-grid" in app_vue
+    assert "planningChecklist" in app_vue
+    assert "generatedPlanCard" in app_vue
+    assert "mobilePanel" in app_vue
+    assert "mobile-workbench-tabs" in app_vue
     assert "legacy-plan-panel" in app_vue
     assert ".conversation-workbench.empty-chat" in styles_css
     assert ".conversation-workbench.plan-workspace-grid" in styles_css
+    assert ".mobile-workbench-tabs" in styles_css
+
+
+def test_frontend_initial_chat_clarifies_before_generation():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    chat_vue = Path("frontend/src/components/TravelChatPanel.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+
+    assert 'mode === "empty_chat" ? "发送" : "提交修改"' in chat_vue
+    assert "规划清单确认" in chat_vue
+    assert "确认清单并生成攻略" in chat_vue
+    assert "攻略已生成" in chat_vue
+    assert "查看并编辑规划" in chat_vue
+    assert "checklistVisible" in chat_vue
+    assert "generatedCard" in chat_vue
+    assert "confirmGenerate" in chat_vue
+    assert "openGeneratedPlan" in chat_vue
+    assert "generateConversationPlan(currentConversation.value.id, payload)" in app_vue
+    assert "shouldShowChecklist" in app_vue
+    assert "/generate" in planner_ts
