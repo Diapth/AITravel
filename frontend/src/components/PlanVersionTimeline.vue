@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RotateCcw } from "lucide-vue-next";
+import { CircleAlert, RotateCcw } from "lucide-vue-next";
 import type { PlanVersionSummary } from "../services/planner";
 
 defineProps<{
@@ -48,6 +48,9 @@ function formatDate(value: string) {
           <strong>第 {{ version.version_number }} 版</strong>
           <span>{{ sourceLabel(version.source) }} · {{ formatDate(version.created_at) }}</span>
           <p>{{ version.summary || "完整行程快照" }}</p>
+          <small v-if="version.validation_warnings?.length" class="version-risk">
+            <CircleAlert :size="13" /> 风险标记 {{ version.validation_warnings.length }} 项
+          </small>
           <small v-if="version.total_cost">预算合计 ¥{{ Math.round(version.total_cost).toLocaleString("zh-CN") }}</small>
         </div>
         <button

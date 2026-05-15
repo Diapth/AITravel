@@ -908,6 +908,196 @@ h3 {
   padding: 24px;
 }
 
+.daily-itinerary-editor {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.editor-save-bar,
+.activity-editor-head,
+.editor-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editor-save-bar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 10px 12px;
+}
+
+.editor-save-bar span,
+.editor-section h3,
+.editor-day-head span {
+  display: block;
+  color: var(--jade);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.editor-save-bar strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.editor-actions,
+.activity-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-editor-action {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.editor-message,
+.editor-warning {
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.editor-message {
+  margin: 0;
+  border: 1px solid rgba(11, 118, 95, 0.16);
+  background: var(--jade-soft);
+  color: var(--jade);
+}
+
+.editor-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid rgba(230, 127, 52, 0.24);
+  background: #fff7ed;
+  color: #8f520f;
+}
+
+.editor-warning svg {
+  flex: 0 0 auto;
+}
+
+.editor-warning strong,
+.editor-warning span {
+  display: block;
+}
+
+.editor-warning button {
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--jade);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 900;
+}
+
+.editor-section,
+.editor-day-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 14px;
+}
+
+.editor-section h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.editor-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.editor-field-grid label,
+.activity-editor-row {
+  min-width: 0;
+}
+
+.editor-field-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.editor-field-grid label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.editor-wide-field {
+  grid-column: 1 / -1;
+}
+
+.editor-field-grid input,
+.editor-field-grid textarea,
+.editor-day-head input,
+.activity-editor-row input,
+.activity-editor-row select,
+.activity-editor-row textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  padding: 9px 10px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.editor-field-grid textarea,
+.activity-editor-row textarea {
+  resize: vertical;
+}
+
+.editor-day-head > div {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 6px;
+}
+
+.activity-editor-list {
+  display: grid;
+  gap: 9px;
+}
+
+.activity-editor-row {
+  display: grid;
+  grid-template-columns: 104px 84px 84px minmax(150px, 1fr) 86px minmax(180px, 1.2fr) 74px;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  padding: 9px;
+}
+
 .version-item {
   position: relative;
   display: grid;
@@ -937,6 +1127,17 @@ h3 {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.version-copy .version-risk {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #8f520f;
+  padding: 3px 7px;
 }
 
 .composer-card,
@@ -3047,6 +3248,23 @@ button:disabled {
   }
 
   .checklist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-save-bar,
+  .editor-day-head,
+  .activity-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editor-actions,
+  .activity-editor-head .compact-editor-action {
+    width: 100%;
+  }
+
+  .editor-field-grid,
+  .activity-editor-row {
     grid-template-columns: 1fr;
   }
 

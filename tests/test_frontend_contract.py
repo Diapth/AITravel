@@ -10,6 +10,7 @@ def test_frontend_files_exist():
         Path("frontend/src/components/PlannerResults.vue"),
         Path("frontend/src/components/ConversationSidebar.vue"),
         Path("frontend/src/components/TravelChatPanel.vue"),
+        Path("frontend/src/components/DailyItineraryEditor.vue"),
         Path("frontend/src/components/RecommendedPlans.vue"),
         Path("frontend/src/components/PlanVersionTimeline.vue"),
         Path("frontend/src/components/PlanWorkspace.vue"),
@@ -240,8 +241,8 @@ def test_frontend_conversation_workbench_contract():
         "requestConversationDetail",
         "sendConversationMessage",
         "generateConversationPlan",
-        "restorePlanVersion",
         "saveManualPlanEdit",
+        "restorePlanVersion",
         "archiveConversation",
         "restoreConversation",
         "requestRecommendedPlans",
@@ -255,6 +256,7 @@ def test_frontend_conversation_workbench_contract():
     assert "RecommendedPlans" in app_vue
     assert "PlanVersionTimeline" in app_vue
     assert "PlanWorkspace" in app_vue
+    assert "DailyItineraryEditor" in Path("frontend/src/components/PlanWorkspace.vue").read_text(encoding="utf-8")
     assert "conversation-workbench empty-chat" in app_vue
     assert "conversation-workbench plan-workspace-grid" in app_vue
     assert "planningChecklist" in app_vue
@@ -265,6 +267,27 @@ def test_frontend_conversation_workbench_contract():
     assert ".conversation-workbench.empty-chat" in styles_css
     assert ".conversation-workbench.plan-workspace-grid" in styles_css
     assert ".mobile-workbench-tabs" in styles_css
+
+
+def test_frontend_exposes_form_based_manual_editor():
+    editor_vue = Path("frontend/src/components/DailyItineraryEditor.vue").read_text(encoding="utf-8")
+    workspace_vue = Path("frontend/src/components/PlanWorkspace.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+
+    assert "DailyItineraryEditor" in workspace_vue
+    assert "表单化编辑" in editor_vue
+    assert "保存新版" in editor_vue
+    assert "添加天数" in editor_vue
+    assert "添加活动" in editor_vue
+    assert "validation_override" in editor_vue
+    assert "serverWarnings" in editor_vue
+    assert "version.validation_warnings" in Path("frontend/src/components/PlanVersionTimeline.vue").read_text(encoding="utf-8")
+    assert "ManualPlanEditRequest" in planner_ts
+    assert "validation_warnings" in planner_ts
+    assert "/manual-edit" in planner_ts
+    assert ".daily-itinerary-editor" in styles_css
+    assert ".activity-editor-row" in styles_css
 
 
 def test_frontend_initial_chat_clarifies_before_generation():
@@ -284,3 +307,14 @@ def test_frontend_initial_chat_clarifies_before_generation():
     assert "generateConversationPlan(currentConversation.value.id, payload)" in app_vue
     assert "shouldShowChecklist" in app_vue
     assert "/generate" in planner_ts
+
+
+def test_backend_exposes_manual_edit_endpoint_contract():
+    main_py = Path("app/main.py").read_text(encoding="utf-8")
+    schemas_py = Path("app/schemas.py").read_text(encoding="utf-8")
+
+    assert "ConversationManualEditRequest" in schemas_py
+    assert '"/api/conversations/{conversation_id}/manual-edit"' in main_py
+    assert 'source="manual_edit"' in main_py
+    assert "VERSION_CONFLICT" in main_py
+    assert "PLAN_VALIDATION_FAILED" in main_py

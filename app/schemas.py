@@ -209,6 +209,20 @@ class ConversationGenerateRequest(BaseModel):
         )
 
 
+class ConversationManualEditRequest(BaseModel):
+    plan: dict[str, Any] = Field(..., description="完整旅行计划 JSON 快照")
+    base_version_id: str | None = None
+    conflict_override: bool = False
+    validation_override: bool = False
+
+    @field_validator("plan")
+    @classmethod
+    def plan_must_be_object(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("plan must be an object")
+        return value
+
+
 class ConversationSummary(BaseModel):
     id: str
     title: str
@@ -238,6 +252,7 @@ class PlanVersionSummary(BaseModel):
     source: str
     summary: str | None = None
     total_cost: float | None = None
+    validation_warnings: list[str] = Field(default_factory=list)
     request_id: str | None = None
     created_at: str
 

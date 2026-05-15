@@ -77,6 +77,7 @@ const isRecommendationLoading = ref(false);
 const isChatBusy = ref(false);
 const chatErrorMessage = ref("");
 const workspaceNotice = ref("");
+const manualEditServerWarnings = ref<string[]>([]);
 const planningChecklist = ref<ConversationGenerateRequest>({ query: "" });
 const checklistVisible = ref(false);
 const generatedPlanCard = ref<{
@@ -530,9 +531,30 @@ async function handleRestoreVersion(versionId: string) {
   }
 }
 
-async function handleSaveManualEdit() {
-  const data = await saveManualPlanEdit();
-  workspaceNotice.value = data.error?.message || "手动编辑暂未开放。";
+async function handleSaveManualEdit(plan: TravelPlan, options: { validation_override?: boolean } = {}) {
+  if (!currentConversation.value) return;
+  workspaceNotice.value = "";
+  manualEditServerWarnings.value = [];
+  isChatBusy.value = true;
+  try {
+    const data = await saveManualPlanEdit(currentConversation.value.id, {
+      plan,
+      base_version_id: currentVersionId.value,
+      validation_override: options.validation_override || false,
+    });
+    if (!data.success) {
+      workspaceNotice.value = data.error?.message || "保存手动编辑失败。";
+      if (data.error?.code === "PLAN_VALIDATION_FAILED" && Array.isArray(data.error.details?.warnings)) {
+        manualEditServerWarnings.value = data.error.details.warnings.filter((warning): warning is string => typeof warning === "string");
+      }
+      return;
+    }
+    applyConversationDetail(await requestConversationDetail(currentConversation.value.id));
+    workspaceNotice.value = `已保存第 ${data.version?.version_number || ""} 版手动编辑。`;
+    await refreshConversationList();
+  } finally {
+    isChatBusy.value = false;
+  }
 }
 
 function startNewConversation() {
@@ -545,6 +567,7 @@ function startNewConversation() {
   errorMessage.value = "";
   chatErrorMessage.value = "";
   workspaceNotice.value = "";
+  manualEditServerWarnings.value = [];
 }
 
 onMounted(() => {
@@ -718,6 +741,8 @@ onBeforeUnmount(stopProgress);
         :conversation="currentConversation"
         :current-plan="currentPlan"
         :save-message="workspaceNotice"
+        :server-warnings="manualEditServerWarnings"
+        :busy="isChatBusy"
         @save-manual-edit="handleSaveManualEdit"
       />
     </section>

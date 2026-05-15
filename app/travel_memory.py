@@ -378,14 +378,24 @@ class TravelMemoryStore:
 
             versions_cursor = conn.execute(
                 """
-                SELECT id, conversation_id, version_number, parent_version_id, source, summary, total_cost, request_id, created_at
+                SELECT id, conversation_id, version_number, parent_version_id, source, summary, total_cost, request_id, created_at, plan_json
                 FROM plan_versions
                 WHERE conversation_id = ?
                 ORDER BY version_number DESC
                 """,
                 (conversation_id,),
             )
-            versions = [self._row_to_dict(versions_cursor, row) for row in versions_cursor.fetchall()]
+            versions = []
+            for row in versions_cursor.fetchall():
+                version = self._row_to_dict(versions_cursor, row)
+                plan_json = version.pop("plan_json", "{}")
+                try:
+                    plan = json.loads(plan_json)
+                except json.JSONDecodeError:
+                    plan = {}
+                warnings = plan.get("validation_warnings") if isinstance(plan, dict) else []
+                version["validation_warnings"] = warnings if isinstance(warnings, list) else []
+                versions.append(version)
 
             current_plan = None
             if conversation["current_version_id"]:
@@ -508,6 +518,7 @@ class TravelMemoryStore:
             "source": source,
             "summary": summary,
             "total_cost": total_cost,
+            "validation_warnings": plan.get("validation_warnings") if isinstance(plan, dict) and isinstance(plan.get("validation_warnings"), list) else [],
             "request_id": request_id,
             "created_at": now,
         }

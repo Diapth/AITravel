@@ -13,6 +13,13 @@ export interface PlanRequest {
 
 export interface ConversationGenerateRequest extends PlanRequest {}
 
+export interface ManualPlanEditRequest {
+  plan: TravelPlan;
+  base_version_id?: string | null;
+  conflict_override?: boolean;
+  validation_override?: boolean;
+}
+
 export interface PlanActivity {
   day?: number;
   start_time?: string;
@@ -149,6 +156,7 @@ export interface PlanVersionSummary {
   source: "ai_generated" | "ai_edit" | "manual_edit" | "rollback" | "recommended" | string;
   summary?: string | null;
   total_cost?: number | null;
+  validation_warnings?: string[];
   request_id?: string | null;
   created_at: string;
 }
@@ -372,14 +380,16 @@ export async function openRecommendedPlan(recommendationId: string): Promise<Con
   return parseApiResponse<ConversationDetailResponse>(response, "打开推荐行程失败，请稍后重试。");
 }
 
-export async function saveManualPlanEdit(): Promise<ConversationMessageResponse> {
-  return {
-    success: false,
-    error: {
-      code: "MANUAL_EDIT_NOT_IMPLEMENTED",
-      message: "手动编辑保存将在 M5 开放；当前请先通过对话继续修改。",
-    },
-  };
+export async function saveManualPlanEdit(
+  conversationId: string,
+  payload: ManualPlanEditRequest,
+): Promise<ConversationMessageResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/manual-edit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseApiResponse<ConversationMessageResponse>(response, "保存手动编辑失败，请稍后重试。");
 }
 
 export async function requestFieldExtraction(query: string): Promise<FieldExtractionResponse> {

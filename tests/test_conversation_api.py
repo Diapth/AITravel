@@ -108,6 +108,132 @@ def test_conversation_generate_creates_editable_draft_when_planner_fails(tmp_pat
     assert "可编辑草案" in data["assistant_message"]["content"]
 
 
+def test_manual_plan_edit_creates_new_version_without_overwriting(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "我会先整理规划清单。")
+
+    class FakePlanner:
+        def plan(self, request):
+            return {
+                "success": True,
+                "plan": {
+                    "target_city": "苏州",
+                    "days": 2,
+                    "people_number": 2,
+                    "budget": 1600,
+                    "total_cost": 900,
+                    "itinerary": [
+                        {
+                            "day": 1,
+                            "title": "园林",
+                            "activities": [{"day": 1, "type": "attraction", "title": "拙政园", "cost": 160}],
+                        }
+                    ],
+                    "llm_summary": "苏州两日游",
+                },
+                "meta": {"request_id": "manual-base"},
+            }
+
+    monkeypatch.setattr("app.main.get_planner", lambda: FakePlanner())
+    client = TestClient(app)
+    created = client.post("/api/conversations", json={"message": "苏州两日游"}).json()
+    generated = client.post(
+        f"/api/conversations/{created['conversation']['id']}/generate",
+        json={"query": "苏州两日游", "target_city": "苏州", "days": 2, "people_number": 2, "budget": 1600},
+    ).json()
+    edited_plan = dict(generated["current_plan"])
+    edited_plan["llm_summary"] = "已手动加入夜游安排"
+    edited_plan["itinerary"][0]["activities"].append(
+        {"day": 1, "type": "activity", "title": "平江路夜游", "start_time": "19:00", "end_time": "21:00", "cost": 0}
+    )
+
+    response = client.post(
+        f"/api/conversations/{created['conversation']['id']}/manual-edit",
+        json={"plan": edited_plan, "base_version_id": generated["version"]["id"]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["version"]["source"] == "manual_edit"
+    assert data["version"]["version_number"] == 2
+    assert data["version"]["parent_version_id"] == generated["version"]["id"]
+    assert data["current_plan"]["llm_summary"] == "已手动加入夜游安排"
+    assert data["current_plan"]["itinerary"][0]["activities"][-1]["title"] == "平江路夜游"
+
+
+def test_manual_plan_edit_reports_version_conflict(tmp_path, monkeypatch):
+    from app.travel_memory import TravelMemoryStore
+
+    monkeypatch_db = tmp_path / "memory.sqlite"
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(monkeypatch_db))
+    store = TravelMemoryStore(monkeypatch_db)
+    conversation = store.create_conversation(title="冲突测试")
+    first = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "attraction", "title": "拙政园"}]}]},
+        source="ai_generated",
+    )
+    store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "activity", "title": "新版本"}]}]},
+        source="manual_edit",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/conversations/{conversation['id']}/manual-edit",
+        json={
+            "plan": {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "attraction", "title": "旧编辑"}]}]},
+            "base_version_id": first["id"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert data["error"]["code"] == "VERSION_CONFLICT"
+
+
+def test_manual_plan_edit_can_save_validation_warnings_with_override(tmp_path, monkeypatch):
+    from app.travel_memory import TravelMemoryStore
+
+    monkeypatch_db = tmp_path / "memory.sqlite"
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(monkeypatch_db))
+    store = TravelMemoryStore(monkeypatch_db)
+    conversation = store.create_conversation(title="风险保存测试")
+    base = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "attraction", "title": "拙政园"}]}]},
+        source="ai_generated",
+    )
+    client = TestClient(app)
+    invalid_plan = {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"title": ""}]}]}
+
+    blocked_response = client.post(
+        f"/api/conversations/{conversation['id']}/manual-edit",
+        json={"plan": invalid_plan, "base_version_id": base["id"]},
+    )
+    blocked_data = blocked_response.json()
+    assert blocked_data["success"] is False
+    assert blocked_data["error"]["code"] == "PLAN_VALIDATION_FAILED"
+    assert blocked_data["error"]["details"]["warnings"]
+
+    saved_response = client.post(
+        f"/api/conversations/{conversation['id']}/manual-edit",
+        json={"plan": invalid_plan, "base_version_id": base["id"], "validation_override": True},
+    )
+
+    assert saved_response.status_code == 200
+    saved_data = saved_response.json()
+    assert saved_data["success"] is True
+    assert saved_data["version"]["source"] == "manual_edit"
+    assert saved_data["version"]["validation_warnings"]
+    detail = client.get(f"/api/conversations/{conversation['id']}").json()
+    assert detail["versions"][0]["validation_warnings"]
+
+
 def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)

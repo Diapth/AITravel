@@ -14,6 +14,7 @@ from app.schemas import (
     ConversationDetailResponse,
     ConversationGenerateRequest,
     ConversationListResponse,
+    ConversationManualEditRequest,
     ConversationMessageRequest,
     ConversationMessageResponse,
     ErrorPayload,
@@ -125,6 +126,35 @@ def _draft_plan_from_request(request: PlanRequest, planner_result: dict | None =
             "detail": fallback_error,
         },
     }
+
+
+def _validate_manual_plan(plan: dict) -> list[str]:
+    warnings: list[str] = []
+    if not isinstance(plan, dict):
+        return ["plan 必须是对象。"]
+    if not isinstance(plan.get("itinerary"), list) or not plan.get("itinerary"):
+        warnings.append("itinerary 必须是非空数组。")
+    for index, day in enumerate(plan.get("itinerary") or [], start=1):
+        if not isinstance(day, dict):
+            warnings.append(f"第 {index} 天必须是对象。")
+            continue
+        if not day.get("day"):
+            warnings.append(f"第 {index} 天缺少 day 字段。")
+        activities = day.get("activities")
+        if activities is None:
+            continue
+        if not isinstance(activities, list):
+            warnings.append(f"第 {index} 天 activities 必须是数组。")
+            continue
+        for activity_index, activity in enumerate(activities, start=1):
+            if not isinstance(activity, dict):
+                warnings.append(f"第 {index} 天第 {activity_index} 个活动必须是对象。")
+                continue
+            if not activity.get("type"):
+                warnings.append(f"第 {index} 天第 {activity_index} 个活动缺少类型。")
+            if not (activity.get("title") or activity.get("position") or activity.get("description")):
+                warnings.append(f"第 {index} 天第 {activity_index} 个活动缺少地点或说明。")
+    return warnings
 
 
 def _generate_first_version(
@@ -349,6 +379,72 @@ def generate_conversation_plan(conversation_id: str, request: ConversationGenera
             error=ErrorPayload(code="PLAN_ALREADY_GENERATED", message="当前会话已经生成行程，可进入工作区继续修改。"),
         )
     return _generate_first_version(store, conversation_id, request.to_plan_request())
+
+
+@app.post(
+    "/api/conversations/{conversation_id}/manual-edit",
+    response_model=ConversationMessageResponse,
+    response_model_exclude_none=True,
+)
+def save_manual_plan_edit(conversation_id: str, request: ConversationManualEditRequest) -> ConversationMessageResponse:
+    store = TravelMemoryStore()
+    detail = store.get_conversation(conversation_id)
+    if detail is None:
+        return ConversationMessageResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    conversation = detail["conversation"]
+    current_version_id = conversation.get("current_version_id")
+    if current_version_id and request.base_version_id and request.base_version_id != current_version_id and not request.conflict_override:
+        return ConversationMessageResponse(
+            success=False,
+            conversation=conversation,
+            current_plan=detail["current_plan"],
+            error=ErrorPayload(
+                code="VERSION_CONFLICT",
+                message="当前行程版本已变化，请刷新到最新版本后再保存，或选择另存为新版本。",
+                details={"current_version_id": current_version_id, "base_version_id": request.base_version_id},
+            ),
+        )
+
+    warnings = _validate_manual_plan(request.plan)
+    if warnings and not request.validation_override:
+        return ConversationMessageResponse(
+            success=False,
+            conversation=conversation,
+            current_plan=detail["current_plan"],
+            error=ErrorPayload(
+                code="PLAN_VALIDATION_FAILED",
+                message="表单内容还不完整，请补齐后保存。",
+                details={"warnings": warnings},
+            ),
+        )
+
+    plan = dict(request.plan)
+    if warnings:
+        plan["validation_warnings"] = warnings
+    version = store.create_plan_version(
+        conversation_id,
+        plan,
+        source="manual_edit",
+        parent_version_id=current_version_id,
+        summary=_plan_summary(plan),
+    )
+    assistant_message = store.append_message(
+        conversation_id,
+        "assistant",
+        f"已保存第 {version['version_number']} 版手动编辑行程。",
+        plan_version_id=version["id"],
+    )
+    updated = store.get_conversation(conversation_id)
+    return ConversationMessageResponse(
+        success=True,
+        conversation=updated["conversation"] if updated else None,
+        assistant_message=assistant_message,
+        version=version,
+        current_plan=updated["current_plan"] if updated else None,
+    )
 
 
 @app.post("/api/extract-fields", response_model=FieldExtractionResponse, response_model_exclude_none=True)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Edit3, Eye, Save } from "lucide-vue-next";
+import { Edit3, Eye } from "lucide-vue-next";
+import DailyItineraryEditor from "./DailyItineraryEditor.vue";
 import PlannerResults from "./PlannerResults.vue";
 import type { ConversationSummary, PlanResponse, TravelPlan } from "../services/planner";
 
@@ -8,10 +9,12 @@ const props = defineProps<{
   conversation?: ConversationSummary | null;
   currentPlan?: TravelPlan | null;
   saveMessage?: string;
+  serverWarnings?: string[];
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{
-  saveManualEdit: [];
+  saveManualEdit: [plan: TravelPlan, options?: { validation_override?: boolean }];
 }>();
 
 const mode = ref<"readonly" | "edit">("readonly");
@@ -55,15 +58,14 @@ const payload = computed(() => ({
       </div>
     </div>
 
-    <div v-if="mode === 'edit'" class="manual-edit-placeholder">
-      <Edit3 :size="24" />
-      <strong>表单化编辑将在 M5 开放</strong>
-      <span>当前版本先保留自然语言二次创作入口，避免直接修改破坏不可变快照。</span>
-      <button class="secondary-action" type="button" @click="emit('saveManualEdit')">
-        <Save :size="16" /> 尝试保存
-      </button>
-      <p v-if="saveMessage">{{ saveMessage }}</p>
-    </div>
+    <DailyItineraryEditor
+      v-if="mode === 'edit'"
+      :plan="currentPlan"
+      :busy="busy"
+      :message="saveMessage"
+      :server-warnings="serverWarnings"
+      @save="(plan, options) => emit('saveManualEdit', plan, options)"
+    />
 
     <PlannerResults
       v-else
