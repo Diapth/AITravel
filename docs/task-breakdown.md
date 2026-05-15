@@ -322,7 +322,7 @@ python -m pytest tests/test_travel_memory.py tests/test_conversation_api.py -q
 
 任务：
 
-- [ ] 扩展前端服务层：
+- [x] 扩展前端服务层：
   - `requestConversations`
   - `createConversation`
   - `requestConversationDetail`
@@ -333,7 +333,7 @@ python -m pytest tests/test_travel_memory.py tests/test_conversation_api.py -q
   - `restoreConversation`
   - `requestRecommendedPlans`
   - `openRecommendedPlan`
-- [ ] 修改 `App.vue`：
+- [x] 修改 `App.vue`：
   - 增加状态机：
     - `empty_chat`
     - `plan_workspace`
@@ -355,16 +355,16 @@ npm run build
 
 任务：
 
-- [ ] 新建 `ConversationSidebar.vue`：
+- [x] 新建 `ConversationSidebar.vue`：
   - 展示 `历史规划`
   - 新建规划
   - 归档 / 恢复
   - 按更新时间排序。
-- [ ] 新建 `TravelChatPanel.vue`：
+- [x] 新建 `TravelChatPanel.vue`：
   - 展示对话消息。
   - 初始态用于描述旅行需求。
   - 行程态用于 `继续修改`。
-- [ ] 新建 `RecommendedPlans.vue`：
+- [x] 新建 `RecommendedPlans.vue`：
   - 展示 `推荐行程`。
   - 支持点击打开行程。
 
@@ -374,15 +374,15 @@ npm run build
 
 任务：
 
-- [ ] 新建 `PlanVersionTimeline.vue`：
+- [x] 新建 `PlanVersionTimeline.vue`：
   - 展示 `版本记录`。
   - 当前版本高亮。
   - 非当前版本可 `回退到此版本`。
-- [ ] 新建 `PlanWorkspace.vue`：
+- [x] 新建 `PlanWorkspace.vue`：
   - 模式切换：`只读` / `编辑`。
   - 只读态复用 `PlannerResults`。
   - 编辑态第一版只保留“继续用自然语言修改”入口，直接编辑器后置到 M5。
-- [ ] 修改 `PlannerResults.vue`：
+- [x] 修改 `PlannerResults.vue`：
   - 支持外部传入已有 `PlanResponse` 或 `TravelPlan`。
   - 降低对“生成中模拟进度”的耦合。
 

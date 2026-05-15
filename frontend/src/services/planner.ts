@@ -118,6 +118,80 @@ export interface PlanResponse {
   error?: PlanError;
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  status: "active" | "archived" | string;
+  current_version_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  current_plan_summary?: string | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversation_id: string;
+  sequence: number;
+  role: "user" | "assistant" | string;
+  content: string;
+  plan_version_id?: string | null;
+  request_id?: string | null;
+  created_at: string;
+}
+
+export interface PlanVersionSummary {
+  id: string;
+  conversation_id: string;
+  version_number: number;
+  parent_version_id?: string | null;
+  source: "ai_generated" | "ai_edit" | "manual_edit" | "rollback" | "recommended" | string;
+  summary?: string | null;
+  total_cost?: number | null;
+  request_id?: string | null;
+  created_at: string;
+}
+
+export interface ConversationDetailResponse {
+  success: boolean;
+  conversation?: ConversationSummary | null;
+  messages: ConversationMessage[];
+  versions: PlanVersionSummary[];
+  current_plan?: TravelPlan | null;
+  error?: PlanError;
+}
+
+export interface ConversationListResponse {
+  success: boolean;
+  conversations: ConversationSummary[];
+  error?: PlanError;
+}
+
+export interface ConversationMessageResponse {
+  success: boolean;
+  conversation?: ConversationSummary | null;
+  message?: ConversationMessage | null;
+  assistant_message?: ConversationMessage | null;
+  version?: PlanVersionSummary | null;
+  current_plan?: TravelPlan | null;
+  error?: PlanError;
+}
+
+export interface RecommendationItem {
+  id: string;
+  title: string;
+  summary: string;
+  plan: TravelPlan;
+  source: string;
+  conversation_id?: string | null;
+  version_id?: string | null;
+}
+
+export interface RecommendedPlansResponse {
+  success: boolean;
+  recommendations: RecommendationItem[];
+  error?: PlanError;
+}
+
 export interface RuntimeHealth {
   ok: boolean;
   deepseek_key_configured: boolean;
@@ -176,6 +250,122 @@ export async function requestPlan(payload: PlanRequest): Promise<PlanResponse> {
   }
 
   return data;
+}
+
+async function parseApiResponse<T extends { success: boolean; error?: PlanError }>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> {
+  const data = (await response.json()) as T;
+
+  if (!response.ok) {
+    return {
+      ...data,
+      success: false,
+      error: {
+        code: `HTTP_${response.status}`,
+        message: data.error?.message || fallbackMessage,
+        details: data as unknown as Record<string, unknown>,
+      },
+    };
+  }
+
+  return data;
+}
+
+export async function requestConversations(): Promise<ConversationListResponse> {
+  const response = await fetch("/api/conversations", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<ConversationListResponse>(response, "读取历史规划失败，请稍后重试。");
+}
+
+export async function createConversation(message: string): Promise<ConversationDetailResponse> {
+  const response = await fetch("/api/conversations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  return parseApiResponse<ConversationDetailResponse>(response, "创建旅行规划失败，请稍后重试。");
+}
+
+export async function requestConversationDetail(conversationId: string): Promise<ConversationDetailResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<ConversationDetailResponse>(response, "读取规划详情失败，请稍后重试。");
+}
+
+export async function sendConversationMessage(
+  conversationId: string,
+  message: string,
+  options: { base_version_id?: string | null; conflict_override?: boolean } = {},
+): Promise<ConversationMessageResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      base_version_id: options.base_version_id,
+      conflict_override: options.conflict_override || false,
+    }),
+  });
+  return parseApiResponse<ConversationMessageResponse>(response, "发送修改要求失败，请稍后重试。");
+}
+
+export async function restorePlanVersion(conversationId: string, versionId: string): Promise<ConversationMessageResponse> {
+  const response = await fetch(
+    `/api/conversations/${encodeURIComponent(conversationId)}/versions/${encodeURIComponent(versionId)}/restore`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    },
+  );
+  return parseApiResponse<ConversationMessageResponse>(response, "回退版本失败，请稍后重试。");
+}
+
+export async function archiveConversation(conversationId: string): Promise<ConversationDetailResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/archive`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<ConversationDetailResponse>(response, "归档规划失败，请稍后重试。");
+}
+
+export async function restoreConversation(conversationId: string): Promise<ConversationDetailResponse> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/restore`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<ConversationDetailResponse>(response, "恢复规划失败，请稍后重试。");
+}
+
+export async function requestRecommendedPlans(): Promise<RecommendedPlansResponse> {
+  const response = await fetch("/api/recommended-plans", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<RecommendedPlansResponse>(response, "读取推荐行程失败，请稍后重试。");
+}
+
+export async function openRecommendedPlan(recommendationId: string): Promise<ConversationDetailResponse> {
+  const response = await fetch(`/api/recommended-plans/${encodeURIComponent(recommendationId)}/open`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<ConversationDetailResponse>(response, "打开推荐行程失败，请稍后重试。");
+}
+
+export async function saveManualPlanEdit(): Promise<ConversationMessageResponse> {
+  return {
+    success: false,
+    error: {
+      code: "MANUAL_EDIT_NOT_IMPLEMENTED",
+      message: "手动编辑保存将在 M5 开放；当前请先通过对话继续修改。",
+    },
+  };
 }
 
 export async function requestFieldExtraction(query: string): Promise<FieldExtractionResponse> {

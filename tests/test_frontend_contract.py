@@ -8,6 +8,11 @@ def test_frontend_files_exist():
         Path("frontend/src/App.vue"),
         Path("frontend/src/components/PlannerComposer.vue"),
         Path("frontend/src/components/PlannerResults.vue"),
+        Path("frontend/src/components/ConversationSidebar.vue"),
+        Path("frontend/src/components/TravelChatPanel.vue"),
+        Path("frontend/src/components/RecommendedPlans.vue"),
+        Path("frontend/src/components/PlanVersionTimeline.vue"),
+        Path("frontend/src/components/PlanWorkspace.vue"),
         Path("frontend/src/services/planner.ts"),
         Path("frontend/src/styles.css"),
     ]:
@@ -222,3 +227,35 @@ def test_frontend_header_buttons_are_interactive():
     assert "@click=\"toggleTheme\"" in app_vue
     assert "@click=\"openDocs\"" in app_vue
     assert "@click=\"toggleCoachMenu\"" in app_vue
+
+
+def test_frontend_conversation_workbench_contract():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+
+    for helper in [
+        "requestConversations",
+        "createConversation",
+        "requestConversationDetail",
+        "sendConversationMessage",
+        "restorePlanVersion",
+        "saveManualPlanEdit",
+        "archiveConversation",
+        "restoreConversation",
+        "requestRecommendedPlans",
+        "openRecommendedPlan",
+    ]:
+        assert helper in planner_ts
+
+    assert 'type AppMode = "empty_chat" | "plan_workspace"' in app_vue
+    assert "ConversationSidebar" in app_vue
+    assert "TravelChatPanel" in app_vue
+    assert "RecommendedPlans" in app_vue
+    assert "PlanVersionTimeline" in app_vue
+    assert "PlanWorkspace" in app_vue
+    assert "conversation-workbench empty-chat" in app_vue
+    assert "conversation-workbench plan-workspace-grid" in app_vue
+    assert "legacy-plan-panel" in app_vue
+    assert ".conversation-workbench.empty-chat" in styles_css
+    assert ".conversation-workbench.plan-workspace-grid" in styles_css
