@@ -41,8 +41,15 @@ def test_dotenv_example_documents_deepseek_configuration():
     assert "DEEPSEEK_DISABLE_THINKING=false" in text
     assert "TAVILY_API_KEY=" in text
     assert "TAVILY_REAL_TIME_ENABLED=false" in text
+    assert "VITE_API_TARGET=http://127.0.0.1:8000" in text
+    assert "VITE_AMAP_API_KEY=" in text
+    assert "VITE_AMAP_SECURITY_CODE=" in text
+    assert "AMAP_WEB_SERVICE_KEY=" in text
+    assert "CHINATRAVEL_MEMORY_DB_PATH=travel_memory.sqlite" in text
     assert "CHINATRAVEL_TRIP_MEMORY_DB=travel_memory.sqlite" in text
     assert "CHINATRAVEL_LLM_TRACE_DIR=logs" in text
+    assert "frontend/dist" in readme
+    assert "frontend/assets" in readme
     assert "api_request.json" in readme
     assert "api_response.json" in readme
     assert "llm_calls.jsonl" in readme

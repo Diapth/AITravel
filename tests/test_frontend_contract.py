@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_frontend_files_exist():
     for relative_path in [
-        Path("frontend/index.html"),
+        Path("index.html"),
         Path("frontend/src/main.ts"),
         Path("frontend/src/App.vue"),
         Path("frontend/src/components/PlannerComposer.vue"),
@@ -21,7 +21,7 @@ def test_frontend_files_exist():
 
 
 def test_frontend_html_mentions_plan_form():
-    html = Path("frontend/index.html").read_text(encoding="utf-8")
+    html = Path("index.html").read_text(encoding="utf-8")
 
     assert "ChinaTravel" in html
     assert "旅行需求" in html
@@ -127,12 +127,11 @@ def test_frontend_uses_compact_desktop_density():
 
 
 def test_frontend_amap_env_is_documented():
-    env_text = Path(".env").read_text(encoding="utf-8")
+    env_text = Path(".env.example").read_text(encoding="utf-8")
 
-    assert "VITE_AMAP_API_KEY=91fc8915faa9ede9655b9be2d25e4f43" in env_text
-    assert "VITE_AMAP_SECURITY_CODE=3a1011379c1da036ff9d07a91e516406" in env_text
+    assert "VITE_AMAP_API_KEY=" in env_text
+    assert "VITE_AMAP_SECURITY_CODE=" in env_text
     assert "AMAP_WEB_SERVICE_KEY=" in env_text
-    assert "AMAP_WEB_SERVICE_KEY=91fc8915faa9ede9655b9be2d25e4f43" not in env_text
 
 
 def test_frontend_composer_uses_compact_field_grid():

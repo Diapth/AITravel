@@ -559,6 +559,6 @@ def plan(request: PlanRequest) -> PlanResponse:
     return PlanResponse.model_validate(get_planner().plan(request))
 
 
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-if frontend_dir.exists():
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+frontend_dist_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if frontend_dist_dir.exists():
+    app.mount("/", StaticFiles(directory=frontend_dist_dir, html=True), name="frontend")

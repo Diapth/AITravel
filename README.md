@@ -1,84 +1,123 @@
-# ChinaTravel Planner
+# AITravel / ChinaTravel Planner
 
-ChinaTravel Planner 是一个面向产品使用的中国旅行规划应用。用户在网页中输入自然语言旅行需求，也可以补充出发城市、目的城市、天数、人数和预算；后端通过 FastAPI 调用现有 `LLMNeSy + DeepSeek + WorldEnv` agent 体系，返回结构化 JSON 行程。
+AITravel 是一个本地可运行的中国旅行规划应用：前端用 Vue 3 提供对话式旅行需求澄清、规划清单确认、历史行程、版本时间线和表单化二次编辑；后端用 FastAPI 调用 `LLMNeSy + DeepSeek + WorldEnv` 生成结构化旅行攻略，并用本地 SQLite 保存会话、消息、不可变行程版本和检索缓存。
 
-本仓库保留 `chinatravel/agent/` 下的 agent 代码，方便后续继续参考和升级。产品入口只暴露 `LLMNeSy + deepseek`。
+仓库只提交前端源码和后端源码。`frontend/index.html`、`frontend/assets/`、`frontend/dist/` 都是 Vite 构建产物或旧产物，已加入 `.gitignore`，不要再提交。
 
 ## 当前功能
 
-- Vite + Vue 3 + Element Plus 前端，访问 FastAPI 根路径即可使用构建后的工作台。
-- `POST /api/plan` 生成 JSON 行程规划。
-- `GET /api/health` 检查 DeepSeek key 和本地旅行数据库状态。
-- 支持自然语言输入与可选结构化字段组合。
-- 前端在等待规划结果时展示 DeepSeek/LLMNeSy 按天生成过程，已生成的天数会先显示。
+- 首屏是用户与 AI 的旅行意图对话，不会一上来直接生成完整行程。
+- 信息足够或用户强制要求生成时，聊天区展示“规划清单确认”，用户确认后才生成第 1 版行程。
+- 生成完成后展示完成卡片，引导用户进入工作区查看和编辑。
+- 工作区支持历史规划、推荐行程、只读查看、版本回退、归档/恢复。
+- 表单化编辑支持修改基础信息、每日行程、活动类型/地点/时间/费用/备注，并保存为新的 `manual_edit` 版本。
+- 手动编辑不会覆盖旧版本；带 `base_version_id` 做冲突检测，校验失败可二次确认保存为风险版本。
+- `POST /api/plan` 保持兼容，可继续用于一次性生成行程。
+- 可选 Tavily 实时攻略证据、高德 Web Service demo、本地旅行记忆和推荐召回。
 
 ## 技术栈
 
-- 后端：FastAPI、Pydantic、Uvicorn。
+- 后端：FastAPI、Pydantic、Uvicorn、SQLite。
 - 前端：Vite、Vue 3、TypeScript、Element Plus、lucide-vue-next。
-- LLM：DeepSeek API，使用 OpenAI SDK 兼容接口调用。
-- Agent：保留原项目 `LLMNeSy` 规划链路，产品默认调用 `LLMNeSy + deepseek`。
-- 数据环境：`WorldEnv` 读取本地 CSV/JSON 旅行数据库，覆盖景点、餐厅、住宿、城际交通、市内交通和 POI。
-- 约束校验：`chinatravel/symbol_verification/`，用于 `LLMNeSy` 运行时检查行程约束。
-- 测试：pytest、FastAPI TestClient。
+- LLM：DeepSeek OpenAI-compatible API。
+- 规划链路：`chinatravel/agent/` 中的 LLMNeSy + WorldEnv。
+- 数据环境：`chinatravel/environment/database/` 下的本地 CSV/JSON/SQLite 旅行数据库。
+- 测试：pytest、FastAPI TestClient、前端 contract 测试，可选 Playwright 烟测脚本。
+
+## 目录结构
+
+```text
+app/             FastAPI API、planner 服务层、实时搜索、运行状态检查
+chinatravel/     原始旅行环境、agent、符号约束和数据构建脚本
+frontend/src/    Vue 前端源码
+tests/           后端、数据、文档和前端 contract 测试
+docs/            任务拆分、设计文档和视觉参考
+index.html       Vite 源码入口
+vite.config.ts   Vite 开发代理和构建配置
+```
+
+构建产物说明：
+
+```text
+frontend/dist/     npm run build 输出目录，FastAPI 只在该目录存在时托管页面
+frontend/assets/   旧版构建输出目录，已废弃并忽略
+frontend/index.html 旧版构建输出文件，已废弃并忽略
+```
 
 ## 环境准备
 
-建议使用 conda 创建独立环境。推荐方式：
+推荐使用 conda：
 
 ```bash
 conda env create -f environment.yml
 conda activate chinatravel-product
 ```
 
-如果只想在已有 Python 环境中安装运行依赖：
+或者在已有 Python 3.12 环境中安装：
 
 ```bash
 pip install -r requirements.txt
+pip install pytest==8.4.2
 ```
 
-前端依赖使用 npm 安装：
+安装前端依赖：
 
 ```bash
 npm install
 ```
 
-配置集中写在项目根目录的 `.env` 中。先复制示例文件：
+复制配置：
 
 ```bash
 cp .env.example .env
 ```
 
-然后编辑 `.env`，填入你的 DeepSeek API Key：
+Windows PowerShell 可用：
 
-```env
-DEEPSEEK_API_KEY=你的 DeepSeek API Key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_MAX_TOKENS=4096
-DEEPSEEK_TEMPERATURE=0
-DEEPSEEK_TOP_P=0.00000001
-DEEPSEEK_TRUST_ENV_PROXY=false
-DEEPSEEK_DISABLE_THINKING=false
+```powershell
+Copy-Item .env.example .env
 ```
 
-后端启动时会自动读取项目根目录的 `.env`。如果你已经在 shell 中设置了 `DEEPSEEK_API_KEY` 或兼容旧配置的 `OPENAI_API_KEY`，shell 环境变量优先，不会被 `.env` 覆盖。真实 `.env` 已在 `.gitignore` 中，不会提交到仓库。
+## 必填配置
 
-如果你使用支持思考模式的 DeepSeek 模型，并希望强制关闭思考输出，可以把 `DEEPSEEK_DISABLE_THINKING=true`。当前默认的 `deepseek-chat` 本身就是非思考模式兼容模型，通常保持 `false` 即可。
+`.env.example` 是完整配置清单，不要只复制 README 里的片段。最小真实运行至少需要：
+
+```env
+DEEPSEEK_API_KEY=你的 DeepSeek Key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+CHINATRAVEL_MEMORY_DB_PATH=travel_memory.sqlite
+CHINATRAVEL_TRIP_MEMORY_DB=travel_memory.sqlite
+```
+
+可选但常用：
+
+```env
+VITE_API_TARGET=http://127.0.0.1:8000
+VITE_AMAP_API_KEY=你的高德 JSAPI Key
+VITE_AMAP_SECURITY_CODE=你的高德安全密钥
+AMAP_WEB_SERVICE_KEY=你的高德 Web Service Key
+TAVILY_API_KEY=你的 Tavily Key
+TAVILY_REAL_TIME_ENABLED=false
+```
+
+注意：
+
+- `DEEPSEEK_API_KEY` 是真实规划和聊天能力的核心配置；兼容旧变量 `OPENAI_API_KEY`。
+- `AMAP_WEB_SERVICE_KEY` 必须是高德 Web 服务 Key，不能用只开通 JSAPI 的前端 key 代替。
+- `VITE_AMAP_API_KEY` 和 `VITE_AMAP_SECURITY_CODE` 只用于浏览器地图面板。
+- `TAVILY_REAL_TIME_ENABLED=false` 时不会默认调用 Tavily，适合本地复现和测试。
+- `.env` 已忽略，不要提交真实 key。
 
 ## 旅行数据库
 
-  1. 打开 https://github.com/LAMDA-NeSy/ChinaTravel
-  2. 在 README → Quick Start → Setup 中点击:
-     • Google Drive   或   • NJU Drive
-  3. 下载 environment.zip（或类似名称的压缩包）
-产品运行依赖本地旅行数据库。请将数据库解压到：
+项目依赖 ChinaTravel 本地数据库。请从上游 ChinaTravel 的 README 下载环境数据，并解压到：
 
 ```text
 chinatravel/environment/database/
 ```
 
-后端会检查以下路径：
+运行状态检查会验证这些目录是否存在：
 
 ```text
 chinatravel/environment/database/attractions
@@ -89,210 +128,248 @@ chinatravel/environment/database/transportation
 chinatravel/environment/database/poi
 ```
 
-数据库目录在 `.gitignore` 中，不会提交到仓库。
-
-## 运行项目
-
-1. 确认健康检查依赖齐全：
-
-```bash
-python -c "from app.runtime_checks import check_runtime; print(check_runtime())"
-```
-
-期望看到：
-
-```python
-{'ok': True, 'deepseek_key_configured': True, 'database_ready': True, 'missing_database_paths': []}
-```
-
-2. 构建前端静态资源：
-
-```bash
-npm run build
-```
-
-构建会把产物写入 `frontend/index.html` 和 `frontend/assets/`，FastAPI 会从该目录挂载页面。
-
-开发前端时也可以单独启动 Vite：
-
-```bash
-npm run dev
-```
-
-3. 启动 FastAPI：
-
-```bash
-uvicorn app.main:app --reload
-```
-
-4. 浏览器打开：
-
-```text
-http://127.0.0.1:8000/
-```
-
-5. 也可以直接请求健康检查：
-
-```bash
-curl http://127.0.0.1:8000/api/health
-```
-
-## API
-
-## SQLite 与高德实时数据
-
-本地 CSV/JSON 仍保留为源数据，运行时优先使用轻量 SQLite 文件：
-
-```text
-chinatravel/environment/database/chinatravel.sqlite
-```
-
-如需从源数据重建 SQLite：
+可选：从源数据构建轻量 SQLite：
 
 ```bash
 python -m chinatravel.data.build_sqlite
 ```
 
-当前数据边界：
-
-- 长期稳定数据：景点快照、POI 坐标、地铁结构、火车和航班快照继续保存在本地 SQLite。
-- 高频变化数据：餐厅、酒店、市内路线、天气优先通过高德 demo 接口验证实时查询能力。
-- 火车和航班暂不接实时票务 API，仍使用本地快照。
-- `POST /api/plan` 暂不直接依赖高德 demo，避免影响现有 LLMNeSy 主链路。
-
-高德 demo 需要在 `.env` 中配置：
-
-```env
-AMAP_WEB_SERVICE_KEY=你的高德 Web 服务 Key
-```
-
-注意：这里必须是高德开放平台的 Web 服务 Key。前端 `VITE_AMAP_API_KEY`
-如果只开通 JSAPI，会在后端 Web Service 请求中返回 `USERKEY_PLAT_NOMATCH`，
-此时超出本地库的城市无法使用高德 fallback 生成行程。
-
-可用 demo 接口：
+默认 SQLite 路径：
 
 ```text
-GET /api/amap-demo/pois?city=苏州&keywords=餐厅
-GET /api/amap-demo/hotels?city=苏州&keywords=酒店
-GET /api/amap-demo/route?origin=120.1,31.1&destination=120.2,31.2&mode=driving
-GET /api/amap-demo/weather?city=苏州
+chinatravel/environment/database/chinatravel.sqlite
 ```
 
-高德 demo 响应统一包含 `success`、`data`、`source`，失败时额外返回 `error`。参考能力来自高德 POI 搜索、路径规划和天气查询 Web 服务。
+## 运行项目
 
-`POST /api/plan`
+启动后端：
+
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+启动前端开发服务器：
+
+```bash
+npm run dev
+```
+
+打开：
+
+```text
+http://127.0.0.1:5173/
+```
+
+Vite 会把 `/api` 代理到 `.env` 中的 `VITE_API_TARGET`，默认是 `http://127.0.0.1:8000`。
+
+## FastAPI 托管前端
+
+生产或演示时先构建前端：
+
+```bash
+npm run build
+```
+
+构建输出到：
+
+```text
+frontend/dist/
+```
+
+然后启动 FastAPI：
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+打开：
+
+```text
+http://127.0.0.1:8000/
+```
+
+FastAPI 只会在 `frontend/dist/` 存在时挂载静态前端。源码目录 `frontend/src/` 不会被当作静态站点托管。
+
+## 运行状态检查
+
+命令行：
+
+```bash
+python -c "from app.runtime_checks import check_runtime; print(check_runtime())"
+```
+
+HTTP：
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+关键字段：
+
+- `deepseek_key_configured`：是否配置 DeepSeek 或兼容 OpenAI key。
+- `database_ready`：本地旅行数据库目录是否齐全。
+- `sqlite_database_ready`：`chinatravel.sqlite` 是否已构建。
+- `tavily_key_configured` / `tavily_real_time_enabled`：实时搜索配置状态。
+
+## 核心 API
+
+一次性生成：
+
+```http
+POST /api/plan
+```
 
 ```json
 {
-  "query": "当前位置上海。我和女朋友想去苏州玩两天，预算1300元，请给我一个旅行规划。",
+  "query": "从上海出发去苏州玩两天，2个人，预算1300元，想轻松一点。",
   "start_city": "上海",
   "target_city": "苏州",
+  "target_cities": ["苏州"],
   "days": 2,
   "people_number": 2,
-  "budget": 1300
+  "budget": 1300,
+  "use_realtime": false
 }
 ```
 
-`query` 必填，其余字段可选。可选字段会合并进自然语言需求，帮助 DeepSeek 更稳定地解析约束。
+对话和版本工作台：
 
-成功响应：
-
-```json
-{
-  "success": true,
-  "plan": {
-    "people_number": 2,
-    "start_city": "上海",
-    "target_city": "苏州",
-    "itinerary": []
-  },
-  "meta": {
-    "agent": "LLMNeSy",
-    "llm": "deepseek",
-    "elapsed_sec": 1.23
-  }
-}
+```text
+GET  /api/conversations
+POST /api/conversations
+GET  /api/conversations/{conversation_id}
+POST /api/conversations/{conversation_id}/messages
+POST /api/conversations/{conversation_id}/generate
+POST /api/conversations/{conversation_id}/manual-edit
+POST /api/conversations/{conversation_id}/versions/{version_id}/restore
+POST /api/conversations/{conversation_id}/archive
+POST /api/conversations/{conversation_id}/restore
 ```
 
-失败响应：
+推荐行程：
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RUNTIME_NOT_READY",
-    "message": "DeepSeek key 或旅行数据库未配置完成。"
-  }
-}
+```text
+GET  /api/recommended-plans
+POST /api/recommended-plans/{recommendation_id}/open
 ```
+
+辅助能力：
+
+```text
+POST /api/extract-fields
+POST /api/image-search
+GET  /api/amap-demo/pois
+GET  /api/amap-demo/hotels
+GET  /api/amap-demo/route
+GET  /api/amap-demo/weather
+```
+
+## 数据和版本规则
+
+- `conversations` 保存会话基本信息和当前版本指针。
+- `conversation_messages` 保存用户和 assistant 消息，排序只依赖 `conversation_id + sequence`。
+- `plan_versions` 保存完整不可变行程快照。
+- `ai_generated` 表示 AI 首次生成。
+- `manual_edit` 表示表单手动编辑。
+- `rollback` 表示回退生成的新快照。
+- `recommended` 表示从推荐行程打开。
+- 手动编辑提交完整 `TravelPlan` JSON，不做局部 patch。
+- 回退不会删除旧版本，只创建新版本。
+- 归档是软删除，可恢复。
 
 ## 日志
 
-每次 `POST /api/plan` 都会按 `request_id` 保存完整链路日志，默认目录是：
+默认日志目录：
 
 ```text
-logs/<request_id>/
+logs/
 ```
 
-其中包含：
+每次规划请求会按 request id 记录：
 
-- `api_request.json`：接口收到的完整输入、生成的 `request_id`、以及合并后的 planner query。
-- `api_response.json`：接口返回给前端的完整 JSON 结果，包含成功或失败响应。
-- `llm_calls.jsonl`：中间 DeepSeek 调用日志，每一行记录一次模型调用的 prompt messages、原始 response、耗时、token 估算和错误信息。
+- `api_request.json`：API 输入、request id、合并后的 planner query。
+- `api_response.json`：返回给前端的完整 JSON。
+- `llm_calls.jsonl`：DeepSeek 调用消息、原始响应、耗时、token 估算和错误。
 
-LLMNeSy agent 运行时的 stdout/stderr 日志会保存在：
+LLMNeSy 运行日志：
 
 ```text
 logs/LLMNeSy_DeepSeek-V3/<request_id>.log
 logs/LLMNeSy_DeepSeek-V3/<request_id>.error
 ```
 
-相关配置在 `.env` 中：
+相关配置：
 
 ```env
 CHINATRAVEL_LLM_TRACE_ENABLED=true
+CHINATRAVEL_LLM_TRACE_CONSOLE=true
+CHINATRAVEL_LLM_TRACE_CONSOLE_PROMPTS=false
 CHINATRAVEL_LLM_TRACE_DIR=logs
+CHINATRAVEL_AGENT_DEBUG_CONSOLE=false
 ```
 
-## 测试
+## 测试和验证
 
-使用 conda 环境时建议显式用当前环境的 Python 跑 pytest，避免系统或用户目录里的 `pytest` 抢占命令：
+后端与契约测试：
 
 ```bash
 python -m pytest -q
 ```
 
-当前测试覆盖：
-
-- runtime 健康检查。
-- `/api/plan` 请求/响应结构。
-- planner 输入构造。
-- Vite/Vue 前端文件、生成过程交互文案和 FastAPI 静态挂载。
-
-前端构建校验：
+前端构建：
 
 ```bash
 npm run build
 ```
 
-## 目录
+只跑前端 contract：
 
-```text
-app/           FastAPI 后端和 planner 服务层
-frontend/      Vue 源码和构建后的静态前端页面
-chinatravel/   原始旅行环境、agent 和运行时约束模块
-tests/         产品化测试
+```bash
+npm run test:frontend-contract
 ```
 
-`chinatravel/symbol_verification/` 是 `LLMNeSy` 运行时依赖，不是可删除的评测壳子。
+浏览器可视化烟测脚本如在本地 `output/` 目录中存在，可在后端和前端服务启动后运行：
+
+```bash
+node output/m5-manual-edit-smoke.mjs
+```
+
+`output/` 是本地验证产物目录，已加入 `.gitignore`。
+
+## 复现清单
+
+1. `git clone` 仓库。
+2. 创建 Python 3.12 环境并安装 `requirements.txt`。
+3. `npm install`。
+4. `cp .env.example .env`，至少填写 `DEEPSEEK_API_KEY`。
+5. 下载并解压 ChinaTravel 数据库到 `chinatravel/environment/database/`。
+6. 启动 `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`。
+7. 开发模式运行 `npm run dev` 并访问 `http://127.0.0.1:5173/`。
+8. 演示/生产模式运行 `npm run build`，再访问 `http://127.0.0.1:8000/`。
+9. 提交前运行 `python -m pytest -q` 和 `npm run build`。
+
+## 不提交的内容
+
+这些文件或目录是本地配置、缓存、数据库、日志或构建产物：
+
+```text
+.env
+node_modules/
+logs/
+cache/
+tmp/
+output/
+travel_memory.sqlite
+frontend/dist/
+frontend/index.html
+frontend/assets/
+chinatravel/environment/database/
+```
 
 ## 还没做的事
 
-- 真实链路压测：目前已经完成依赖、数据库和 API 健康检查；还需要用多组真实旅行需求评估 DeepSeek 调用耗时、失败率和行程质量。
-- 请求超时与取消：`/api/plan` 目前同步等待 agent 结果，后续应加入超时控制、任务队列或异步任务状态查询。
-- 前端体验增强：当前页面展示 JSON 和基础 itinerary 卡片，后续可增加费用汇总、时间轴、交通段折叠、错误修复提示。
-- 生产配置管理：当前本地开发使用 `.env`，后续可增加部署平台密钥管理、环境分层配置和配置校验命令。
-- 日志与观测：需要结构化记录请求、耗时、token 统计、失败原因，便于后续优化 agent。
-- Agent 策略扩展：当前产品入口固定 `LLMNeSy + deepseek`，保留的其他 agent 还没有暴露为可选策略。
-- 部署方案：还未提供 Dockerfile、反向代理配置、生产启动脚本或 CI 流程。
+- M5.1 自然语言继续修改生成 `ai_edit` 版本。
+- M5.3 完整前端冲突处理：刷新到最新版本或强制另存新版本。
+- M5.4 活动类型专用字段增强：交通、住宿、餐饮、景点。
+- M6 运行状态 UI、README/API 文档继续细化、手动验证脚本固化。
+- 后续生产化：PostgreSQL、Redis、pgvector、异步任务队列和数据治理。
