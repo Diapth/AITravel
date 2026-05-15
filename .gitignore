@@ -11,7 +11,6 @@ travel_memory.sqlite
 .env
 .codex
 tmp/
-docs/
 .super*
 
 # Node.js
@@ -25,8 +24,15 @@ lerna-debug.log*
 # build output
 dist/
 build/
+frontend/dist/
+frontend/index.html
+frontend/assets/
 *.tsbuildinfo
+
+# generated screenshots and smoke-test artifacts
+output/
 
 # local env files
 .env.local
 .env.*.local
+

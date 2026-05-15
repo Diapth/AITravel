@@ -111,6 +111,193 @@ class ImageSearchResponse(BaseModel):
     error: ErrorPayload | None = None
 
 
+class ConversationCreateRequest(BaseModel):
+    message: str = Field(..., description="用户发起会话的自然语言旅行需求")
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
+
+
+class ConversationMessageRequest(BaseModel):
+    message: str = Field(..., description="追加到会话中的用户消息")
+    base_version_id: str | None = None
+    conflict_override: bool = False
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
+
+
+class ConversationGenerateRequest(BaseModel):
+    query: str = Field(..., description="确认后的旅行规划需求")
+    start_city: str | None = None
+    target_city: str | None = None
+    target_cities: list[str] = Field(default_factory=list)
+    departure_date: date | None = None
+    return_date: date | None = None
+    days: int | None = Field(default=None, ge=1, le=30)
+    people_number: int | None = Field(default=None, ge=1, le=50)
+    budget: int | None = Field(default=None, ge=1)
+    use_realtime: bool | None = None
+
+    @field_validator("query")
+    @classmethod
+    def query_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("query must not be blank")
+        return value
+
+    @field_validator("start_city", "target_city")
+    @classmethod
+    def empty_optional_text_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @field_validator("target_cities", mode="before")
+    @classmethod
+    def normalize_target_cities(cls, value: Any) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            items = [value]
+        else:
+            items = list(value)
+        cleaned: list[str] = []
+        seen = set()
+        for item in items:
+            city = str(item).strip()
+            if city and city not in seen:
+                seen.add(city)
+                cleaned.append(city)
+        return cleaned
+
+    @model_validator(mode="after")
+    def normalize_destination_and_dates(self) -> "ConversationGenerateRequest":
+        if self.target_cities and not self.target_city:
+            self.target_city = "、".join(self.target_cities)
+        if self.departure_date and self.return_date:
+            if self.return_date < self.departure_date:
+                raise ValueError("return_date must not be earlier than departure_date")
+            if self.days is None:
+                self.days = (self.return_date - self.departure_date).days + 1
+        return self
+
+    def to_plan_request(self) -> PlanRequest:
+        return PlanRequest(
+            query=self.query,
+            start_city=self.start_city,
+            target_city=self.target_city,
+            target_cities=self.target_cities,
+            departure_date=self.departure_date,
+            return_date=self.return_date,
+            days=self.days,
+            people_number=self.people_number,
+            budget=self.budget,
+            use_realtime=self.use_realtime,
+        )
+
+
+class ConversationManualEditRequest(BaseModel):
+    plan: dict[str, Any] = Field(..., description="完整旅行计划 JSON 快照")
+    base_version_id: str | None = None
+    conflict_override: bool = False
+    validation_override: bool = False
+
+    @field_validator("plan")
+    @classmethod
+    def plan_must_be_object(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("plan must be an object")
+        return value
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str
+    status: str
+    current_version_id: str | None = None
+    created_at: str
+    updated_at: str
+    current_plan_summary: str | None = None
+
+
+class ConversationMessage(BaseModel):
+    id: str
+    conversation_id: str
+    sequence: int
+    role: str
+    content: str
+    plan_version_id: str | None = None
+    request_id: str | None = None
+    created_at: str
+
+
+class PlanVersionSummary(BaseModel):
+    id: str
+    conversation_id: str
+    version_number: int
+    parent_version_id: str | None = None
+    source: str
+    summary: str | None = None
+    total_cost: float | None = None
+    validation_warnings: list[str] = Field(default_factory=list)
+    request_id: str | None = None
+    created_at: str
+
+
+class ConversationDetailResponse(BaseModel):
+    success: bool
+    conversation: ConversationSummary | None = None
+    messages: list[ConversationMessage] = Field(default_factory=list)
+    versions: list[PlanVersionSummary] = Field(default_factory=list)
+    current_plan: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+
+class ConversationListResponse(BaseModel):
+    success: bool
+    conversations: list[ConversationSummary] = Field(default_factory=list)
+    error: ErrorPayload | None = None
+
+
+class ConversationMessageResponse(BaseModel):
+    success: bool
+    conversation: ConversationSummary | None = None
+    message: ConversationMessage | None = None
+    assistant_message: ConversationMessage | None = None
+    version: PlanVersionSummary | None = None
+    current_plan: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+
+class RecommendationItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    plan: dict[str, Any]
+    source: str
+    conversation_id: str | None = None
+    version_id: str | None = None
+
+
+class RecommendedPlansResponse(BaseModel):
+    success: bool
+    recommendations: list[RecommendationItem] = Field(default_factory=list)
+    error: ErrorPayload | None = None
+
+
 class PlanResponse(BaseModel):
     success: bool
     plan: dict[str, Any] | None = None

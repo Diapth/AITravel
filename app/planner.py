@@ -563,6 +563,8 @@ def fetch_realtime_context(request: PlanRequest) -> tuple[list[dict[str, Any]], 
             "error": result.error,
         }
     )
+    if result.success and not evidence and result.error is None:
+        meta["empty_reason"] = "NO_RELIABLE_EVIDENCE"
     return evidence, meta
 
 

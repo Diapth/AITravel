@@ -227,6 +227,28 @@ def test_extract_fields_endpoint_uses_deepseek_helper(monkeypatch):
     assert response.json()["fields"]["preferences"] == ["自然风光", "美食体验"]
 
 
+def test_conversation_create_uses_deepseek_chat_helper(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    captured = {}
+
+    def fake_chat(messages, user_message):
+        captured["messages"] = messages
+        captured["user_message"] = user_message
+        return "你好，我是旅行规划助手。可以先告诉我想去哪里、玩几天和预算范围。"
+
+    monkeypatch.setattr("app.main.chat_about_trip_intent", fake_chat)
+    client = TestClient(app)
+
+    response = client.post("/api/conversations", json={"message": "你好"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert captured == {"messages": [], "user_message": "你好"}
+    assert payload["messages"][1]["role"] == "assistant"
+    assert "旅行规划助手" in payload["messages"][1]["content"]
+
+
 def test_images_endpoint_degrades_to_empty_images_when_provider_fails(monkeypatch):
     def fake_search(*args, **kwargs):
         raise ValueError("provider returned warning html")
@@ -488,6 +510,27 @@ def test_fetch_realtime_context_retries_when_first_query_is_empty(tmp_path, monk
     assert len(calls) == 2
     assert meta["searched_queries"] == calls
     assert "\u5b98\u65b9\u516c\u544a" in calls[1]
+
+
+def test_fetch_realtime_context_reports_empty_evidence_reason(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAVILY_REAL_TIME_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+
+    class EmptyTavilyClient:
+        def search(self, *args, **kwargs):
+            from app.realtime.tavily_client import TavilySearchResult
+
+            return TavilySearchResult(success=True, evidence=[], usage={"credits": 1})
+
+    monkeypatch.setattr(planner_module, "TavilySearchClient", lambda: EmptyTavilyClient())
+
+    evidence, meta = planner_module.fetch_realtime_context(PlanRequest(query="苏州两日游", target_city="苏州"))
+
+    assert evidence == []
+    assert meta["success"] is True
+    assert meta["evidence_count"] == 0
+    assert meta["empty_reason"] == "NO_RELIABLE_EVIDENCE"
+    assert meta["error"] is None
 
 
 def test_fetch_realtime_context_exposes_evidence_in_meta(tmp_path, monkeypatch):

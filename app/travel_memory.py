@@ -15,6 +15,59 @@ from chinatravel.config import get_env_value, get_int_env
 
 DEFAULT_MEMORY_DB = "travel_memory.sqlite"
 BUDGET_BUCKETS = (500, 1000, 1500, 3000)
+STATIC_RECOMMENDED_PLANS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "sample-guilin-yangshuo",
+        "title": "桂林阳朔 4 天 3 晚",
+        "summary": "漓江竹筏、遇龙河骑行和当地美食，适合轻松自然风光游。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "桂林、阳朔",
+            "target_cities": ["桂林", "阳朔"],
+            "days": 4,
+            "people_number": 2,
+            "budget": 3400,
+            "total_cost": 3200,
+            "llm_summary": "桂林阳朔四天三晚，兼顾山水、骑行和美食。",
+            "itinerary": [],
+        },
+    },
+    {
+        "id": "sample-chengdu-food",
+        "title": "成都美食 3 天 2 晚",
+        "summary": "茶馆、川菜、街区漫游和宽松节奏，适合中等预算。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "成都",
+            "target_cities": ["成都"],
+            "days": 3,
+            "people_number": 2,
+            "budget": 2800,
+            "total_cost": 2500,
+            "llm_summary": "成都三天两晚美食体验路线。",
+            "itinerary": [],
+        },
+    },
+    {
+        "id": "sample-suzhou-weekend",
+        "title": "苏州周末 2 天 1 晚",
+        "summary": "园林、评弹、平江路和轻量交通，适合周末短途。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "苏州",
+            "target_cities": ["苏州"],
+            "days": 2,
+            "people_number": 2,
+            "budget": 1300,
+            "total_cost": 1100,
+            "llm_summary": "苏州周末两天一晚轻松路线。",
+            "itinerary": [],
+        },
+    },
+)
 PII_PATTERNS = (
     re.compile(r"1[3-9]\d{9}"),
     re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
@@ -23,11 +76,15 @@ PII_PATTERNS = (
 
 
 def get_memory_db_path() -> Path:
-    value = get_env_value("CHINATRAVEL_TRIP_MEMORY_DB") or DEFAULT_MEMORY_DB
+    value = (
+        get_env_value("CHINATRAVEL_MEMORY_DB_PATH")
+        or get_env_value("CHINATRAVEL_TRIP_MEMORY_DB")
+        or DEFAULT_MEMORY_DB
+    )
     path = Path(value)
     if path.is_absolute():
-        return path
-    return Path(__file__).resolve().parent.parent / path
+        return path.resolve()
+    return (Path(__file__).resolve().parent.parent / path).resolve()
 
 
 def utc_now_iso() -> str:
@@ -43,6 +100,23 @@ def redact_query(query: str) -> str:
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _plan_card_title(plan: dict[str, Any]) -> str:
+    target = plan.get("target_city") or "推荐行程"
+    days = plan.get("days")
+    if days:
+        return f"{target} {days} 天"
+    return str(target)
+
+
+def _plan_card_summary(plan: dict[str, Any]) -> str:
+    summary = plan.get("llm_summary") or plan.get("summary")
+    if summary:
+        return str(summary)[:160]
+    target = plan.get("target_city") or "目的地"
+    days = plan.get("days") or "多"
+    return f"{target}{days}天行程，可继续聊天修改。"
 
 
 def _bucket_budget(value: int | None) -> str:
@@ -167,6 +241,424 @@ class TravelMemoryStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_trip_requests_route ON trip_requests(start_city, days, budget)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_trip_plans_route_key ON trip_plans(route_key)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_trip_plans_quality ON trip_plans(quality_score)")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                  id TEXT PRIMARY KEY,
+                  title TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'active',
+                  current_version_id TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                  id TEXT PRIMARY KEY,
+                  conversation_id TEXT NOT NULL,
+                  sequence INTEGER NOT NULL,
+                  role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+                  content TEXT NOT NULL,
+                  plan_version_id TEXT,
+                  request_id TEXT,
+                  created_at TEXT NOT NULL,
+                  FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+                  FOREIGN KEY(plan_version_id) REFERENCES plan_versions(id),
+                  UNIQUE(conversation_id, sequence)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS plan_versions (
+                  id TEXT PRIMARY KEY,
+                  conversation_id TEXT NOT NULL,
+                  version_number INTEGER NOT NULL,
+                  parent_version_id TEXT,
+                  source TEXT NOT NULL CHECK(source IN ('ai_generated', 'ai_edit', 'manual_edit', 'rollback', 'recommended')),
+                  plan_json TEXT NOT NULL,
+                  summary TEXT,
+                  total_cost REAL,
+                  request_id TEXT,
+                  created_at TEXT NOT NULL,
+                  FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+                  FOREIGN KEY(parent_version_id) REFERENCES plan_versions(id),
+                  UNIQUE(conversation_id, version_number)
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_conversation_messages_thread ON conversation_messages(conversation_id, sequence)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_plan_versions_thread ON plan_versions(conversation_id, version_number DESC)"
+            )
+            try:
+                conn.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS conversation_messages_fts
+                    USING fts5(content, conversation_id UNINDEXED, message_id UNINDEXED)
+                    """
+                )
+            except sqlite3.OperationalError:
+                pass
+
+    @staticmethod
+    def _row_to_dict(cursor: sqlite3.Cursor, row: sqlite3.Row | tuple[Any, ...]) -> dict[str, Any]:
+        columns = [description[0] for description in cursor.description]
+        return dict(zip(columns, row))
+
+    def create_conversation(self, title: str | None = None) -> dict[str, Any]:
+        self.initialize()
+        now = utc_now_iso()
+        conversation_id = f"conv_{uuid4().hex}"
+        conversation_title = (title or "未命名行程").strip() or "未命名行程"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO conversations (id, title, status, current_version_id, created_at, updated_at)
+                VALUES (?, ?, 'active', NULL, ?, ?)
+                """,
+                (conversation_id, conversation_title, now, now),
+            )
+        return {
+            "id": conversation_id,
+            "title": conversation_title,
+            "status": "active",
+            "current_version_id": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def list_conversations(self, limit: int = 30, include_archived: bool = False) -> list[dict[str, Any]]:
+        self.initialize()
+        where = "" if include_archived else "WHERE status = 'active'"
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                f"""
+                SELECT id, title, status, current_version_id, created_at, updated_at
+                FROM conversations
+                {where}
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            return [self._row_to_dict(cursor, row) for row in cursor.fetchall()]
+
+    def get_conversation(self, conversation_id: str) -> dict[str, Any] | None:
+        self.initialize()
+        with sqlite3.connect(self.db_path) as conn:
+            conversation_cursor = conn.execute(
+                """
+                SELECT id, title, status, current_version_id, created_at, updated_at
+                FROM conversations
+                WHERE id = ?
+                """,
+                (conversation_id,),
+            )
+            conversation_row = conversation_cursor.fetchone()
+            if conversation_row is None:
+                return None
+            conversation = self._row_to_dict(conversation_cursor, conversation_row)
+
+            messages_cursor = conn.execute(
+                """
+                SELECT id, conversation_id, sequence, role, content, plan_version_id, request_id, created_at
+                FROM conversation_messages
+                WHERE conversation_id = ?
+                ORDER BY sequence ASC
+                """,
+                (conversation_id,),
+            )
+            messages = [self._row_to_dict(messages_cursor, row) for row in messages_cursor.fetchall()]
+
+            versions_cursor = conn.execute(
+                """
+                SELECT id, conversation_id, version_number, parent_version_id, source, summary, total_cost, request_id, created_at, plan_json
+                FROM plan_versions
+                WHERE conversation_id = ?
+                ORDER BY version_number DESC
+                """,
+                (conversation_id,),
+            )
+            versions = []
+            for row in versions_cursor.fetchall():
+                version = self._row_to_dict(versions_cursor, row)
+                plan_json = version.pop("plan_json", "{}")
+                try:
+                    plan = json.loads(plan_json)
+                except json.JSONDecodeError:
+                    plan = {}
+                warnings = plan.get("validation_warnings") if isinstance(plan, dict) else []
+                version["validation_warnings"] = warnings if isinstance(warnings, list) else []
+                versions.append(version)
+
+            current_plan = None
+            if conversation["current_version_id"]:
+                plan_row = conn.execute(
+                    "SELECT plan_json FROM plan_versions WHERE id = ?",
+                    (conversation["current_version_id"],),
+                ).fetchone()
+                if plan_row:
+                    current_plan = json.loads(plan_row[0])
+
+        return {
+            "conversation": conversation,
+            "messages": messages,
+            "versions": versions,
+            "current_plan": current_plan,
+        }
+
+    def append_message(
+        self,
+        conversation_id: str,
+        role: str,
+        content: str,
+        plan_version_id: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.initialize()
+        now = utc_now_iso()
+        message_id = f"msg_{uuid4().hex}"
+        with sqlite3.connect(self.db_path) as conn:
+            sequence = (
+                conn.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM conversation_messages WHERE conversation_id = ?",
+                    (conversation_id,),
+                ).fetchone()[0]
+            )
+            conn.execute(
+                """
+                INSERT INTO conversation_messages (
+                  id, conversation_id, sequence, role, content, plan_version_id, request_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (message_id, conversation_id, sequence, role, content, plan_version_id, request_id, now),
+            )
+            conn.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conversation_id))
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO conversation_messages_fts (content, conversation_id, message_id)
+                    VALUES (?, ?, ?)
+                    """,
+                    (content, conversation_id, message_id),
+                )
+            except sqlite3.OperationalError:
+                pass
+        return {
+            "id": message_id,
+            "conversation_id": conversation_id,
+            "sequence": sequence,
+            "role": role,
+            "content": content,
+            "plan_version_id": plan_version_id,
+            "request_id": request_id,
+            "created_at": now,
+        }
+
+    def create_plan_version(
+        self,
+        conversation_id: str,
+        plan: dict[str, Any],
+        source: str,
+        parent_version_id: str | None = None,
+        request_id: str | None = None,
+        summary: str | None = None,
+    ) -> dict[str, Any]:
+        self.initialize()
+        now = utc_now_iso()
+        version_id = f"ver_{uuid4().hex}"
+        total_cost = None
+        if plan.get("total_cost") is not None:
+            try:
+                total_cost = float(plan["total_cost"])
+            except (TypeError, ValueError):
+                total_cost = None
+        with sqlite3.connect(self.db_path) as conn:
+            version_number = (
+                conn.execute(
+                    "SELECT COALESCE(MAX(version_number), 0) + 1 FROM plan_versions WHERE conversation_id = ?",
+                    (conversation_id,),
+                ).fetchone()[0]
+            )
+            conn.execute(
+                """
+                INSERT INTO plan_versions (
+                  id, conversation_id, version_number, parent_version_id, source,
+                  plan_json, summary, total_cost, request_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version_id,
+                    conversation_id,
+                    version_number,
+                    parent_version_id,
+                    source,
+                    json.dumps(plan, ensure_ascii=False, sort_keys=True, default=str),
+                    summary,
+                    total_cost,
+                    request_id,
+                    now,
+                ),
+            )
+            conn.execute(
+                "UPDATE conversations SET current_version_id = ?, updated_at = ? WHERE id = ?",
+                (version_id, now, conversation_id),
+            )
+        return {
+            "id": version_id,
+            "conversation_id": conversation_id,
+            "version_number": version_number,
+            "parent_version_id": parent_version_id,
+            "source": source,
+            "summary": summary,
+            "total_cost": total_cost,
+            "validation_warnings": plan.get("validation_warnings") if isinstance(plan, dict) and isinstance(plan.get("validation_warnings"), list) else [],
+            "request_id": request_id,
+            "created_at": now,
+        }
+
+    def archive_conversation(self, conversation_id: str) -> dict[str, Any]:
+        return self._set_conversation_status(conversation_id, "archived")
+
+    def restore_conversation(self, conversation_id: str) -> dict[str, Any]:
+        return self._set_conversation_status(conversation_id, "active")
+
+    def _set_conversation_status(self, conversation_id: str, status: str) -> dict[str, Any]:
+        self.initialize()
+        now = utc_now_iso()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE conversations SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, conversation_id),
+            )
+            cursor = conn.execute(
+                """
+                SELECT id, title, status, current_version_id, created_at, updated_at
+                FROM conversations
+                WHERE id = ?
+                """,
+                (conversation_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise ValueError("Conversation not found")
+            return self._row_to_dict(cursor, row)
+
+    def restore_version(self, conversation_id: str, version_id: str) -> dict[str, Any]:
+        self.initialize()
+        with sqlite3.connect(self.db_path) as conn:
+            current_row = conn.execute(
+                "SELECT current_version_id FROM conversations WHERE id = ?",
+                (conversation_id,),
+            ).fetchone()
+            if current_row is None:
+                raise ValueError("Conversation not found")
+            source_row = conn.execute(
+                """
+                SELECT plan_json, summary
+                FROM plan_versions
+                WHERE id = ? AND conversation_id = ?
+                """,
+                (version_id, conversation_id),
+            ).fetchone()
+            if source_row is None:
+                raise ValueError("Plan version not found")
+            plan = json.loads(source_row[0])
+            restored_summary = f"回退到：{source_row[1]}" if source_row[1] else "回退版本"
+        return self.create_plan_version(
+            conversation_id,
+            plan,
+            source="rollback",
+            parent_version_id=current_row[0],
+            summary=restored_summary,
+        )
+
+    def recommended_plans(self, limit: int = 6) -> list[dict[str, Any]]:
+        self.initialize()
+        recommendations: list[dict[str, Any]] = []
+        with sqlite3.connect(self.db_path) as conn:
+            version_rows = conn.execute(
+                """
+                SELECT pv.id, pv.conversation_id, pv.summary, pv.plan_json, pv.source, pv.created_at, c.title
+                FROM plan_versions pv
+                JOIN conversations c ON c.id = pv.conversation_id
+                WHERE c.status = 'active'
+                ORDER BY pv.created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            for version_id, conversation_id, summary, plan_json, source, _created_at, title in version_rows:
+                plan = json.loads(plan_json)
+                recommendations.append(
+                    {
+                        "id": f"version-{version_id}",
+                        "title": title,
+                        "summary": summary or _plan_card_summary(plan),
+                        "source": source,
+                        "plan": plan,
+                        "conversation_id": conversation_id,
+                        "version_id": version_id,
+                    }
+                )
+            if len(recommendations) < limit:
+                trip_rows = conn.execute(
+                    """
+                    SELECT id, plan_summary, plan_json, source_agent
+                    FROM trip_plans
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit - len(recommendations),),
+                ).fetchall()
+                for plan_id, summary, plan_json, source_agent in trip_rows:
+                    plan = json.loads(plan_json)
+                    recommendations.append(
+                        {
+                            "id": f"trip-{plan_id}",
+                            "title": _plan_card_title(plan),
+                            "summary": summary or _plan_card_summary(plan),
+                            "source": source_agent or "trip_memory",
+                            "plan": plan,
+                        }
+                    )
+        if len(recommendations) < limit:
+            for item in STATIC_RECOMMENDED_PLANS:
+                if len(recommendations) >= limit:
+                    break
+                recommendations.append(dict(item))
+        return recommendations
+
+    def open_recommended_plan(self, recommendation_id: str) -> dict[str, Any]:
+        recommendation = next(
+            (item for item in self.recommended_plans(limit=30) if item["id"] == recommendation_id),
+            None,
+        )
+        if recommendation is None:
+            raise ValueError("Recommendation not found")
+        conversation = self.create_conversation(title=recommendation["title"])
+        version = self.create_plan_version(
+            conversation["id"],
+            recommendation["plan"],
+            source="recommended",
+            summary=recommendation["summary"],
+        )
+        self.append_message(
+            conversation["id"],
+            "assistant",
+            "已打开推荐行程，可继续告诉我你想怎么调整。",
+            plan_version_id=version["id"],
+        )
+        detail = self.get_conversation(conversation["id"])
+        if detail is None:
+            raise ValueError("Conversation not found after opening recommendation")
+        return detail
 
     def write_trip(
         self,
