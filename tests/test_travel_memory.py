@@ -65,3 +65,81 @@ def test_memory_db_path_keeps_legacy_env_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_TRIP_MEMORY_DB", str(old_path))
 
     assert get_memory_db_path() == old_path.resolve()
+
+
+def test_conversation_schema_and_indexes_are_initialized(tmp_path):
+    db_path = tmp_path / "memory.sqlite"
+    store = TravelMemoryStore(db_path)
+
+    store.initialize()
+
+    with sqlite3.connect(db_path) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table')"
+            )
+        }
+        indexes = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")}
+
+    assert {"conversations", "conversation_messages", "plan_versions"}.issubset(tables)
+    assert "idx_conversations_updated_at" in indexes
+    assert "idx_conversation_messages_thread" in indexes
+    assert "idx_plan_versions_thread" in indexes
+
+
+def test_create_conversation_and_get_detail(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+
+    conversation = store.create_conversation(title="桂林阳朔 4 天")
+    detail = store.get_conversation(conversation["id"])
+
+    assert conversation["title"] == "桂林阳朔 4 天"
+    assert conversation["status"] == "active"
+    assert conversation["current_version_id"] is None
+    assert detail is not None
+    assert detail["conversation"]["id"] == conversation["id"]
+    assert detail["messages"] == []
+    assert detail["versions"] == []
+    assert detail["current_plan"] is None
+
+
+def test_append_message_increments_sequence_per_conversation(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+    first = store.create_conversation(title="第一条")
+    second = store.create_conversation(title="第二条")
+
+    first_user = store.append_message(first["id"], "user", "我想去桂林")
+    first_assistant = store.append_message(first["id"], "assistant", "已收到")
+    second_user = store.append_message(second["id"], "user", "我想去苏州")
+
+    assert first_user["sequence"] == 1
+    assert first_assistant["sequence"] == 2
+    assert second_user["sequence"] == 1
+
+
+def test_create_plan_version_updates_current_version(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+    conversation = store.create_conversation(title="桂林阳朔")
+
+    version_1 = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "桂林", "itinerary": []},
+        source="ai_generated",
+        summary="第一版",
+    )
+    version_2 = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "阳朔", "itinerary": []},
+        source="ai_edit",
+        parent_version_id=version_1["id"],
+        summary="第二版",
+    )
+    detail = store.get_conversation(conversation["id"])
+
+    assert version_1["version_number"] == 1
+    assert version_2["version_number"] == 2
+    assert version_2["parent_version_id"] == version_1["id"]
+    assert detail["conversation"]["current_version_id"] == version_2["id"]
+    assert detail["current_plan"]["target_city"] == "阳朔"
+    assert [version["version_number"] for version in detail["versions"]] == [2, 1]

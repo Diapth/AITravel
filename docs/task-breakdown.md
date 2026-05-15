@@ -177,20 +177,20 @@ npm run build
 
 任务：
 
-- [ ] 增量扩展 `app/travel_memory.py`，保留旧表并新增：
+- [x] 增量扩展 `app/travel_memory.py`，保留旧表并新增：
   - `conversations`
   - `conversation_messages`
   - `plan_versions`
   - 可选 `conversation_messages_fts`
-- [ ] 实现 `TravelMemoryStore`：
+- [x] 实现 `TravelMemoryStore`：
   - `initialize()`
   - `create_conversation()`
   - `list_conversations()`
   - `get_conversation()`
   - `append_message()`
   - `create_plan_version()`
-- [ ] 保证版本编号按 conversation 递增：`1, 2, 3...`。
-- [ ] 保证消息排序只依赖 `conversation_id + sequence`，不依赖创建时间。
+- [x] 保证版本编号按 conversation 递增：`1, 2, 3...`。
+- [x] 保证消息排序只依赖 `conversation_id + sequence`，不依赖创建时间。
 
 验收命令：
 
