@@ -20,16 +20,42 @@ import {
   Users,
   Waves,
 } from "lucide-vue-next";
-import type { PlanRequest } from "../services/planner";
+import type { PlanRequest, RuntimeHealth } from "../services/planner";
 import { requestFieldExtraction } from "../services/planner";
 
-defineProps<{
+const props = defineProps<{
   disabled: boolean;
+  runtimeHealth: RuntimeHealth | null;
 }>();
 
 const emit = defineEmits<{
   "submit-plan": [payload: PlanRequest];
 }>();
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(isoValue: string, days: number) {
+  if (!isoValue) return "";
+  const date = new Date(`${isoValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return isoDate(new Date(date.getTime() + days * DAY_MS));
+}
+
+function defaultDepartureDate() {
+  const today = new Date();
+  const daysUntilSaturday = ((6 - today.getDay()) + 7) % 7 || 7;
+  return isoDate(new Date(today.getTime() + daysUntilSaturday * DAY_MS));
+}
+
+function defaultReturnDate(days: number, departureDate = defaultDepartureDate()) {
+  return addDays(departureDate, Math.max(days - 1, 0));
+}
 
 const form = reactive({
   query:
@@ -37,11 +63,12 @@ const form = reactive({
   start_city: "上海",
   target_city: "桂林, 阳朔",
   days: 4,
-  departure_date: "",
-  return_date: "",
+  departure_date: defaultDepartureDate(),
+  return_date: defaultReturnDate(4),
   people_number: 2,
   budget: 3400,
   budgetLabel: "中等预算（¥2,000 - ¥3,500 / 人）",
+  use_realtime: false,
 });
 
 const budgetOptions = [
@@ -113,12 +140,49 @@ const preferences = reactive([
 ]);
 
 const queryCount = computed(() => form.query.length);
+const realtimeStatus = computed(() => {
+  if (!props.runtimeHealth) return "检测中";
+  if (!props.runtimeHealth.tavily_key_configured) return "缺少 Tavily Key";
+  if (form.use_realtime) return "本次启用";
+  if (props.runtimeHealth.tavily_real_time_enabled) return "后端默认开启";
+  return "默认关闭";
+});
+const realtimeHint = computed(() => {
+  if (!props.runtimeHealth) return "正在读取后端配置。";
+  if (!props.runtimeHealth.tavily_key_configured) return "请先在 .env 配置 TAVILY_API_KEY 或 TAVILY_SEARCH_KEY。";
+  if (form.use_realtime) return "本次生成会检索 Tavily 热门攻略，并把来源展示在结果页。";
+  if (props.runtimeHealth.tavily_real_time_enabled) return "后端 .env 已开启 TAVILY_REAL_TIME_ENABLED=true。";
+  return "可打开本开关临时启用，或在 .env 设置 TAVILY_REAL_TIME_ENABLED=true 后重启 FastAPI。";
+});
 const budgetMenuOpen = ref(false);
 const isExtracting = ref(false);
 const extractionMessage = ref("");
+const validationErrors = ref<string[]>([]);
+const validationDialogOpen = ref(false);
+const knownTravelCityNames = [
+  "北京",
+  "上海",
+  "天津",
+  "重庆",
+  "南京",
+  "苏州",
+  "杭州",
+  "武汉",
+  "广州",
+  "深圳",
+  "成都",
+  "西安",
+  "厦门",
+  "桂林",
+  "阳朔",
+  "大理",
+  "丽江",
+];
 
 function applySample(sample: typeof samples[number]) {
   Object.assign(form, sample);
+  form.departure_date = defaultDepartureDate();
+  form.return_date = defaultReturnDate(form.days, form.departure_date);
 }
 
 function clearForm() {
@@ -126,11 +190,12 @@ function clearForm() {
   form.start_city = "";
   form.target_city = "";
   form.days = 4;
-  form.departure_date = "";
-  form.return_date = "";
+  form.departure_date = defaultDepartureDate();
+  form.return_date = defaultReturnDate(form.days, form.departure_date);
   form.people_number = 2;
   form.budget = 3400;
   form.budgetLabel = "中等预算（¥2,000 - ¥3,500 / 人）";
+  form.use_realtime = false;
   preferences.forEach((item, index) => {
     item.active = index === 0;
   });
@@ -139,6 +204,9 @@ function clearForm() {
 function adjust(field: "days" | "people_number", amount: number) {
   const max = field === "days" ? 30 : 50;
   form[field] = Math.min(Math.max(form[field] + amount, 1), max);
+  if (field === "days" && form.departure_date) {
+    form.return_date = defaultReturnDate(form.days, form.departure_date);
+  }
 }
 
 function togglePreference(item: typeof preferences[number]) {
@@ -151,16 +219,79 @@ function selectBudget(option: typeof budgetOptions[number]) {
   budgetMenuOpen.value = false;
 }
 
+function handleDepartureDateChange() {
+  if (form.departure_date) {
+    form.return_date = defaultReturnDate(form.days, form.departure_date);
+  }
+}
+
+function ensureFormDates() {
+  if (!form.departure_date) {
+    form.departure_date = defaultDepartureDate();
+  }
+  if (!form.return_date) {
+    form.return_date = defaultReturnDate(form.days, form.departure_date);
+  }
+}
+
+function dateDiffDays(start: string, end: string) {
+  const startTime = new Date(`${start}T00:00:00`).getTime();
+  const endTime = new Date(`${end}T00:00:00`).getTime();
+  if (Number.isNaN(startTime) || Number.isNaN(endTime)) return 0;
+  return Math.round((endTime - startTime) / DAY_MS) + 1;
+}
+
 function budgetLabelForAmount(amount: number) {
   const matched = budgetOptions.find((option) => amount <= option.budget);
   return matched?.label || budgetOptions[budgetOptions.length - 1].label;
 }
 
 function targetCityList() {
-  return form.target_city
+  const normalized = form.target_city.replace(/\s+/g, "");
+  const parts = normalized
     .split(/[,，、/|;；]+|(?:和|与|及|以及)/)
     .map((city) => city.trim())
     .filter(Boolean);
+  if (parts.length === 1) {
+    const matched = knownTravelCityNames.filter((city) => normalized.includes(city));
+    if (matched.length >= 2) {
+      return matched.sort((left, right) => normalized.indexOf(left) - normalized.indexOf(right));
+    }
+  }
+  return parts;
+}
+
+function validateForm() {
+  const errors: string[] = [];
+  const query = form.query.trim();
+  const startCity = form.start_city.trim();
+  const targetCity = form.target_city.trim();
+  const cities = targetCityList();
+
+  if (!query) errors.push("请先填写自然语言旅行需求。");
+  if (!startCity) errors.push("请填写出发城市。");
+  if (!targetCity || !cities.length) errors.push("请填写目的城市；多个目的地请用逗号分隔。");
+  if (targetCity && cities.length === 1 && targetCity.length >= 7 && !knownTravelCityNames.some((city) => targetCity.includes(city))) {
+    errors.push("目的城市看起来像连续描述，请拆成城市名，例如“桂林, 阳朔”。");
+  }
+  if (!form.departure_date) errors.push("请选择出发日期。");
+  if (!form.return_date) errors.push("请选择回程日期。");
+  if (form.departure_date && form.return_date) {
+    const actualDays = dateDiffDays(form.departure_date, form.return_date);
+    if (actualDays <= 0) errors.push("回程日期不能早于出发日期。");
+    if (actualDays > 0 && actualDays !== form.days) {
+      errors.push(`日期跨度为 ${actualDays} 天，请调整为当前设置的 ${form.days} 天，或修改天数。`);
+    }
+  }
+  if (form.people_number < 1) errors.push("出行人数至少为 1 人。");
+  if (form.budget < 1) errors.push("预算必须大于 0。");
+
+  return errors;
+}
+
+function showValidationErrors(errors: string[]) {
+  validationErrors.value = errors;
+  validationDialogOpen.value = true;
 }
 
 async function extractFields() {
@@ -199,6 +330,7 @@ async function extractFields() {
 }
 
 function compactPayload(): PlanRequest {
+  ensureFormDates();
   const selectedPreferences = preferences.filter((item) => item.active).map((item) => item.label);
   const queryWithPreferences =
     selectedPreferences.length > 0 ? `${form.query.trim()} 兴趣偏好：${selectedPreferences.join("、")}。` : form.query.trim();
@@ -212,6 +344,12 @@ function compactPayload(): PlanRequest {
 }
 
 function submit() {
+  ensureFormDates();
+  const errors = validateForm();
+  if (errors.length) {
+    showValidationErrors(errors);
+    return;
+  }
   emit("submit-plan", compactPayload());
 }
 </script>
@@ -258,6 +396,18 @@ function submit() {
       </button>
       <p v-if="extractionMessage" class="composer-inline-feedback" role="status">{{ extractionMessage }}</p>
 
+      <section class="realtime-control" aria-label="实时攻略开关">
+        <div>
+          <strong>实时攻略</strong>
+          <span>{{ realtimeHint }}</span>
+        </div>
+        <label class="switch-field">
+          <input v-model="form.use_realtime" type="checkbox" :disabled="disabled || props.runtimeHealth?.tavily_key_configured === false" />
+          <i aria-hidden="true" />
+          <b>{{ realtimeStatus }}</b>
+        </label>
+      </section>
+
       <div class="control-stack compact-control-grid">
         <el-form-item label="出发城市">
           <el-input v-model="form.start_city" :prefix-icon="MapPin" placeholder="上海" :disabled="disabled" clearable />
@@ -284,7 +434,8 @@ function submit() {
             placeholder="自动推荐"
             :prefix-icon="CalendarDays"
             :disabled="disabled"
-            clearable
+            :clearable="false"
+            @change="handleDepartureDateChange"
           />
         </el-form-item>
 
@@ -296,7 +447,7 @@ function submit() {
             placeholder="按天数自动推算"
             :prefix-icon="CalendarDays"
             :disabled="disabled"
-            clearable
+            :clearable="false"
           />
         </el-form-item>
 
@@ -379,5 +530,15 @@ function submit() {
         <span>由 DeepSeek-V2 提供智能生成</span>
       </div>
     </el-form>
+
+    <div v-if="validationDialogOpen" class="validation-dialog-backdrop" role="presentation">
+      <section class="validation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="validation-dialog-title">
+        <h3 id="validation-dialog-title">请先修正这些信息</h3>
+        <ul>
+          <li v-for="item in validationErrors" :key="item">{{ item }}</li>
+        </ul>
+        <button type="button" class="primary-action compact-dialog-action" @click="validationDialogOpen = false">我来调整</button>
+      </section>
+    </div>
   </aside>
 </template>

@@ -8,6 +8,7 @@ export interface PlanRequest {
   days?: number;
   people_number?: number;
   budget?: number;
+  use_realtime?: boolean;
 }
 
 export interface PlanActivity {
@@ -79,16 +80,49 @@ export interface PlanError {
   details?: Record<string, unknown>;
 }
 
+export interface RealtimeEvidence {
+  title: string;
+  url: string;
+  content_summary: string;
+  source: string;
+  fetched_at: string;
+  expires_at: string;
+  confidence: number;
+  risk_flags: string[];
+}
+
+export interface PlanMeta {
+  request_id?: string;
+  realtime?: {
+    enabled?: boolean;
+    provider?: string;
+    cache_hit?: boolean;
+    query?: string;
+    fallback_queries?: string[];
+    searched_queries?: string[];
+    success?: boolean;
+    evidence_count?: number;
+    evidence?: RealtimeEvidence[];
+    usage?: Record<string, unknown>;
+    error?: Record<string, unknown> | null;
+  };
+  history_reuse?: Record<string, unknown>;
+  memory_write?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface PlanResponse {
   success: boolean;
   plan?: TravelPlan;
-  meta?: Record<string, unknown>;
+  meta?: PlanMeta;
   error?: PlanError;
 }
 
 export interface RuntimeHealth {
   ok: boolean;
   deepseek_key_configured: boolean;
+  tavily_key_configured?: boolean;
+  tavily_real_time_enabled?: boolean;
   database_ready: boolean;
   missing_database_paths: string[];
 }
