@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.amap_demo import AmapDemoClient, AmapDemoError, amap_demo_error, amap_demo_response
-from app.assistants import extract_fields_from_query, search_images
+from app.assistants import chat_about_trip_intent, extract_fields_from_query, search_images
 from app.planner import get_planner
 from app.runtime_checks import check_runtime
 from app.schemas import (
@@ -46,6 +46,18 @@ def _conversation_detail_response(store: TravelMemoryStore, conversation_id: str
     return ConversationDetailResponse(success=True, **detail)
 
 
+def _conversation_chat_context(detail: dict | None) -> list[dict[str, str]]:
+    if not detail:
+        return []
+    context: list[dict[str, str]] = []
+    for message in detail.get("messages") or []:
+        role = str(message.get("role") or "")
+        content = str(message.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            context.append({"role": role, "content": content})
+    return context
+
+
 def _plan_summary(plan: dict | None) -> str | None:
     if not isinstance(plan, dict):
         return None
@@ -65,6 +77,56 @@ def _request_id_from_meta(meta: dict | None) -> str | None:
     return None
 
 
+def _draft_plan_from_request(request: PlanRequest, planner_result: dict | None = None) -> dict:
+    target_cities = request.target_cities or ([request.target_city] if request.target_city else [])
+    destination = request.target_city or "、".join(target_cities) or "待确认目的地"
+    days = request.days or 3
+    people_number = request.people_number or 1
+    budget = request.budget or 0
+    error = (planner_result or {}).get("error") or {}
+    fallback_error = ((planner_result or {}).get("meta") or {}).get("fallback_error")
+    draft_days = []
+    for day in range(1, min(days, 8) + 1):
+        draft_days.append(
+            {
+                "day": day,
+                "title": f"第 {day} 天 · {destination} 草案",
+                "summary": "主规划链路暂未返回稳定结果，已先保留可编辑占位，后续可继续让 AI 或表单细化。",
+                "activities": [
+                    {
+                        "day": day,
+                        "type": "attraction",
+                        "title": f"{destination} 体验待确认",
+                        "position": destination,
+                        "start_time": "09:30",
+                        "end_time": "12:00",
+                        "description": "根据用户偏好补全景点、交通、餐饮和住宿细节。",
+                        "cost": 0,
+                    }
+                ],
+            }
+        )
+    return {
+        "start_city": request.start_city,
+        "target_city": destination,
+        "target_cities": target_cities,
+        "days": days,
+        "people_number": people_number,
+        "budget": budget,
+        "total_cost": 0,
+        "remaining_budget": budget,
+        "itinerary": draft_days,
+        "llm_summary": f"已创建 {destination} {days} 天旅行草案，等待继续细化。",
+        "fallback": {
+            "used": True,
+            "source": "conversation_draft",
+            "reason": error.get("code") or "PLANNER_UNAVAILABLE",
+            "message": error.get("message") or "主规划链路暂未返回可用行程。",
+            "detail": fallback_error,
+        },
+    }
+
+
 def _generate_first_version(
     store: TravelMemoryStore,
     conversation_id: str,
@@ -73,20 +135,11 @@ def _generate_first_version(
     user_message_row: dict | None = None,
 ) -> ConversationMessageResponse:
     planner_result = get_planner().plan(request)
-    if not planner_result.get("success") or not isinstance(planner_result.get("plan"), dict):
-        detail = store.get_conversation(conversation_id)
-        return ConversationMessageResponse(
-            success=False,
-            conversation=detail["conversation"] if detail else None,
-            message=user_message_row,
-            error=ErrorPayload(
-                code=str((planner_result.get("error") or {}).get("code") or "PLANNER_FAILED"),
-                message=str((planner_result.get("error") or {}).get("message") or "行程生成失败。"),
-                details=planner_result,
-            ),
-        )
-
-    plan = planner_result["plan"]
+    plan = (
+        planner_result["plan"]
+        if planner_result.get("success") and isinstance(planner_result.get("plan"), dict)
+        else _draft_plan_from_request(request, planner_result)
+    )
     request_id = _request_id_from_meta(planner_result.get("meta"))
     version = store.create_plan_version(
         conversation_id,
@@ -98,7 +151,7 @@ def _generate_first_version(
     assistant_message = store.append_message(
         conversation_id,
         "assistant",
-        f"已生成第 {version['version_number']} 版行程。",
+        f"已生成第 {version['version_number']} 版行程。" if not plan.get("fallback", {}).get("used") else f"已生成第 {version['version_number']} 版可编辑草案，主规划链路的失败原因已保留在草案说明里。",
         plan_version_id=version["id"],
         request_id=request_id,
     )
@@ -150,15 +203,16 @@ def create_conversation(request: ConversationCreateRequest) -> ConversationDetai
     store = TravelMemoryStore()
     conversation = store.create_conversation(title=_conversation_title(request.message))
     store.append_message(conversation["id"], "user", request.message)
+    assistant_content = chat_about_trip_intent([], request.message)
     store.append_message(
         conversation["id"],
         "assistant",
-        "我先帮你梳理旅行需求。可以继续告诉我出发地、天数、预算、同行人和想要的节奏；信息够了以后，我会给你一张规划清单确认卡。",
+        assistant_content,
     )
     return _conversation_detail_response(store, conversation["id"])
 
 
-@app.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse, response_model_exclude_none=True)
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse)
 def get_conversation(conversation_id: str) -> ConversationDetailResponse:
     return _conversation_detail_response(TravelMemoryStore(), conversation_id)
 
@@ -248,10 +302,11 @@ def append_conversation_message(conversation_id: str, request: ConversationMessa
             message=user_message,
             error=ErrorPayload(code="AI_EDIT_NOT_IMPLEMENTED", message="已有行程的继续修改将在后续版本开放。"),
         )
+    assistant_content = chat_about_trip_intent(_conversation_chat_context(detail), request.message)
     assistant_message = store.append_message(
         conversation_id,
         "assistant",
-        "收到。我会先把这些信息放进规划清单；如果还不确定，可以继续补充目的地、日期、预算或旅行节奏。",
+        assistant_content,
     )
     updated = store.get_conversation(conversation_id)
     return ConversationMessageResponse(

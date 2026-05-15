@@ -14,6 +14,7 @@ def _runtime_ready():
 
 def test_conversation_api_creates_conversation_without_first_plan(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "你好，我在。先告诉我你想去哪里、玩几天和预算范围吧。")
     client = TestClient(app)
 
     response = client.post("/api/conversations", json={"message": "我想去桂林阳朔玩 4 天"})
@@ -26,12 +27,13 @@ def test_conversation_api_creates_conversation_without_first_plan(tmp_path, monk
     assert data["conversation"]["current_version_id"] is None
     assert data["messages"][0]["role"] == "user"
     assert data["messages"][1]["role"] == "assistant"
-    assert "规划清单确认卡" in data["messages"][1]["content"]
+    assert "你好，我在" in data["messages"][1]["content"]
 
 
 def test_conversation_generate_creates_first_plan_after_confirmation(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "我先整理需求，稍后给你确认清单。")
 
     class FakePlanner:
         def plan(self, request):
@@ -75,9 +77,41 @@ def test_conversation_generate_creates_first_plan_after_confirmation(tmp_path, m
     assert data["version"]["version_number"] == 1
 
 
+def test_conversation_generate_creates_editable_draft_when_planner_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "我会先整理规划清单。")
+
+    class FailingPlanner:
+        def plan(self, request):
+            return {
+                "success": False,
+                "meta": {"request_id": "failed-plan", "fallback_error": "amap quota exceeded"},
+                "error": {"code": "NO_PLAN_FOUND", "message": "未能生成满足条件的行程规划。"},
+            }
+
+    monkeypatch.setattr("app.main.get_planner", lambda: FailingPlanner())
+    client = TestClient(app)
+    created = client.post("/api/conversations", json={"message": "想去桂林阳朔"}).json()
+
+    response = client.post(
+        f"/api/conversations/{created['conversation']['id']}/generate",
+        json={"query": "桂林阳朔四日游", "target_city": "桂林阳朔", "days": 4, "people_number": 2, "budget": 3400},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["version"]["source"] == "ai_generated"
+    assert data["current_plan"]["fallback"]["source"] == "conversation_draft"
+    assert data["current_plan"]["fallback"]["reason"] == "NO_PLAN_FOUND"
+    assert "可编辑草案" in data["assistant_message"]["content"]
+
+
 def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "收到，我会继续确认细节。")
 
     class FakePlanner:
         def plan(self, request):
@@ -108,6 +142,7 @@ def test_conversation_api_lists_and_reads_detail(tmp_path, monkeypatch):
 def test_conversation_api_archive_restore_and_rollback(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "收到，我会继续确认细节。")
 
     class FakePlanner:
         def plan(self, request):
@@ -144,6 +179,7 @@ def test_conversation_api_archive_restore_and_rollback(tmp_path, monkeypatch):
 def test_conversation_message_keeps_clarifying_when_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     monkeypatch.setattr("app.main.check_runtime", _runtime_ready)
+    monkeypatch.setattr("app.main.chat_about_trip_intent", lambda messages, user_message: "成都三日游可以，我还想确认预算和同行人数。")
     client = TestClient(app)
     from app.travel_memory import TravelMemoryStore
 
@@ -157,6 +193,7 @@ def test_conversation_message_keeps_clarifying_when_empty(tmp_path, monkeypatch)
     assert data.get("version") is None
     assert data["message"]["role"] == "user"
     assert data["assistant_message"]["role"] == "assistant"
+    assert "预算" in data["assistant_message"]["content"]
 
 
 def test_recommended_plans_return_static_fallback_and_open(tmp_path, monkeypatch):

@@ -227,6 +227,28 @@ def test_extract_fields_endpoint_uses_deepseek_helper(monkeypatch):
     assert response.json()["fields"]["preferences"] == ["自然风光", "美食体验"]
 
 
+def test_conversation_create_uses_deepseek_chat_helper(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    captured = {}
+
+    def fake_chat(messages, user_message):
+        captured["messages"] = messages
+        captured["user_message"] = user_message
+        return "你好，我是旅行规划助手。可以先告诉我想去哪里、玩几天和预算范围。"
+
+    monkeypatch.setattr("app.main.chat_about_trip_intent", fake_chat)
+    client = TestClient(app)
+
+    response = client.post("/api/conversations", json={"message": "你好"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert captured == {"messages": [], "user_message": "你好"}
+    assert payload["messages"][1]["role"] == "assistant"
+    assert "旅行规划助手" in payload["messages"][1]["content"]
+
+
 def test_images_endpoint_degrades_to_empty_images_when_provider_fails(monkeypatch):
     def fake_search(*args, **kwargs):
         raise ValueError("provider returned warning html")
