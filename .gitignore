@@ -10,7 +10,6 @@ logs/
 .env
 .codex
 tmp/
-docs/
 .super*
 
 # Node.js
@@ -29,3 +28,4 @@ build/
 # local env files
 .env.local
 .env.*.local
+

@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" fill="none" stroke="#dfe7df" stroke-width="1" opacity="0.45"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#202824" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .bg { fill: #fbfaf6; }
+      .panel { fill: #ffffff; stroke: #dfe6df; stroke-width: 1.5; rx: 14; filter: url(#shadow); }
+      .soft { fill: #f6faf6; stroke: #dfe6df; stroke-width: 1; rx: 10; }
+      .muted { fill: #6d7671; font: 500 18px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .tiny { fill: #7a837e; font: 500 14px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .label { fill: #26302c; font: 700 18px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .title { fill: #141a18; font: 900 30px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .section { fill: #141a18; font: 900 22px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .chip { fill: #e8f4ee; stroke: #b9d9c9; stroke-width: 1; rx: 9; }
+      .chipText { fill: #0b765f; font: 800 14px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .warn { fill: #fff3d7; stroke: #e9b85a; stroke-width: 1; rx: 9; }
+      .warnText { fill: #a7650c; font: 800 14px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .danger { fill: #fff0ef; stroke: #efb6b2; stroke-width: 1; rx: 9; }
+      .dangerText { fill: #bd2f2b; font: 800 14px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .btn { fill: #0b765f; rx: 10; }
+      .btnText { fill: #ffffff; font: 900 16px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .line { stroke: #dfe6df; stroke-width: 1.5; }
+      .jade { fill: #0b765f; }
+      .amber { fill: #e7a137; }
+      .red { fill: #bd2f2b; }
+      .mapLine { stroke: #95b6a8; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+      .input { fill: #fbfcfa; stroke: #d7e0d9; stroke-width: 1.4; rx: 10; }
+      .smallHead { fill: #141a18; font: 900 16px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1600" height="1000"/>
+  <rect width="1600" height="1000" fill="url(#grid)" opacity="0.55"/>
+
+  <rect x="36" y="28" width="1528" height="78" rx="16" fill="#ffffff" stroke="#dfe6df" filter="url(#shadow)"/>
+  <circle cx="78" cy="67" r="24" fill="#e8f4ee" stroke="#b9d9c9"/>
+  <path d="M68 73c12-20 24-20 36 0M72 72h28M78 57v25" stroke="#0b765f" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <text x="118" y="62" class="title">ChinaTravel Planner</text>
+  <text x="118" y="88" class="muted">对话式行程工作台 · 单机 SQLite · 版本化编辑</text>
+  <rect class="chip" x="1010" y="49" width="128" height="36"/>
+  <text class="chipText" x="1032" y="72">FastAPI 运行中</text>
+  <rect class="chip" x="1152" y="49" width="136" height="36"/>
+  <text class="chipText" x="1173" y="72">DeepSeek 运行中</text>
+  <rect class="warn" x="1302" y="49" width="118" height="36"/>
+  <text class="warnText" x="1324" y="72">本地记忆库</text>
+  <rect class="soft" x="1438" y="49" width="84" height="36"/>
+  <text class="label" x="1461" y="72">主题</text>
+
+  <text x="42" y="145" class="section">首次进入：聊天生成 / 推荐打开</text>
+  <text x="820" y="145" class="section">已有行程：聊天修改 / 表单编辑 / 版本回退</text>
+
+  <!-- Empty chat mode -->
+  <rect class="panel" x="36" y="166" width="742" height="786"/>
+  <rect class="soft" x="60" y="194" width="184" height="730"/>
+  <text x="80" y="228" class="section">历史规划</text>
+  <rect class="btn" x="80" y="250" width="128" height="40"/>
+  <text class="btnText" x="105" y="276">新建规划</text>
+  <rect class="soft" x="80" y="315" width="142" height="82"/>
+  <text x="96" y="341" class="smallHead">桂林阳朔</text>
+  <text x="96" y="365" class="tiny">4天3晚 · 手动编辑</text>
+  <rect class="warn" x="96" y="374" width="72" height="22"/>
+  <text class="warnText" x="108" y="390">风险提示</text>
+  <rect class="soft" x="80" y="414" width="142" height="68"/>
+  <text x="96" y="440" class="smallHead">苏州周末</text>
+  <text x="96" y="464" class="tiny">已归档 · 可恢复</text>
+  <rect class="danger" x="96" y="494" width="72" height="24"/>
+  <text class="dangerText" x="116" y="512">归档</text>
+  <rect class="chip" x="176" y="494" width="72" height="24"/>
+  <text class="chipText" x="196" y="512">恢复</text>
+
+  <rect class="soft" x="264" y="194" width="284" height="730"/>
+  <text x="290" y="232" class="section">和 AI 规划旅行</text>
+  <text x="290" y="262" class="muted">直接描述目的地、天数、预算和偏好。</text>
+  <rect class="input" x="290" y="294" width="232" height="210"/>
+  <text x="310" y="330" class="label">我想去桂林阳朔玩 4 天</text>
+  <text x="310" y="360" class="muted">想体验漓江竹筏、遇龙河骑行</text>
+  <text x="310" y="390" class="muted">和当地美食，预算中等。</text>
+  <rect class="chip" x="290" y="526" width="90" height="34"/>
+  <text class="chipText" x="312" y="548">自然风光</text>
+  <rect class="chip" x="390" y="526" width="90" height="34"/>
+  <text class="chipText" x="412" y="548">美食体验</text>
+  <rect class="chip" x="290" y="572" width="110" height="34"/>
+  <text class="chipText" x="312" y="594">轻松休闲</text>
+  <rect class="btn" x="290" y="638" width="232" height="48"/>
+  <text class="btnText" x="368" y="668">生成行程</text>
+  <line class="line" x1="290" y1="724" x2="522" y2="724"/>
+  <text x="290" y="758" class="smallHead">生成后</text>
+  <text x="290" y="784" class="muted">聊天框迁移到左侧，右侧展示完整行程。</text>
+
+  <rect class="soft" x="568" y="194" width="184" height="730"/>
+  <text x="590" y="228" class="section">推荐行程</text>
+  <rect class="soft" x="590" y="258" width="138" height="132"/>
+  <text x="606" y="286" class="smallHead">桂林阳朔</text>
+  <text x="606" y="312" class="tiny">4天3晚 · 2人</text>
+  <text x="606" y="338" class="tiny">竹筏 / 骑行 / 美食</text>
+  <rect class="btn" x="606" y="354" width="92" height="30"/>
+  <text class="btnText" x="620" y="375">打开行程</text>
+  <rect class="soft" x="590" y="410" width="138" height="132"/>
+  <text x="606" y="438" class="smallHead">成都美食</text>
+  <text x="606" y="464" class="tiny">3天2晚 · 中等预算</text>
+  <text x="606" y="490" class="tiny">茶馆 / 川菜 / 街区</text>
+  <rect class="btn" x="606" y="506" width="92" height="30"/>
+  <text class="btnText" x="620" y="527">打开行程</text>
+
+  <!-- Workspace mode -->
+  <rect class="panel" x="820" y="166" width="744" height="786"/>
+  <rect class="soft" x="844" y="194" width="218" height="730"/>
+  <text x="866" y="228" class="section">当前对话</text>
+  <rect class="danger" x="954" y="204" width="58" height="28"/>
+  <text class="dangerText" x="970" y="224">归档</text>
+  <rect class="chip" x="1018" y="204" width="58" height="28"/>
+  <text class="chipText" x="1034" y="224">恢复</text>
+  <rect class="input" x="866" y="256" width="172" height="54"/>
+  <text x="882" y="288" class="tiny">用户：想把 D2 改轻松一点</text>
+  <rect class="input" x="866" y="324" width="172" height="70"/>
+  <text x="882" y="354" class="tiny">AI：已生成第 3 版</text>
+  <text x="882" y="378" class="tiny">并保留上一版可回退。</text>
+  <rect class="input" x="866" y="416" width="172" height="86"/>
+  <text x="882" y="448" class="tiny">继续修改...</text>
+  <rect class="btn" x="902" y="522" width="100" height="38"/>
+  <text class="btnText" x="922" y="547">继续修改</text>
+  <line class="line" x1="866" y1="596" x2="1038" y2="596"/>
+  <text x="866" y="632" class="section">版本记录</text>
+  <rect class="soft" x="866" y="654" width="172" height="66"/>
+  <text x="884" y="680" class="smallHead">V3 手动编辑</text>
+  <rect class="warn" x="884" y="692" width="72" height="22"/>
+  <text class="warnText" x="896" y="708">风险提示</text>
+  <rect class="soft" x="866" y="734" width="172" height="66"/>
+  <text x="884" y="760" class="smallHead">V2 AI修改</text>
+  <rect class="chip" x="884" y="772" width="110" height="22"/>
+  <text class="chipText" x="896" y="788">回退到此版本</text>
+  <rect class="soft" x="866" y="814" width="172" height="66"/>
+  <text x="884" y="840" class="smallHead">V1 推荐打开</text>
+  <rect class="chip" x="884" y="852" width="110" height="22"/>
+  <text class="chipText" x="896" y="868">回退到此版本</text>
+
+  <rect class="soft" x="1082" y="194" width="456" height="730"/>
+  <text x="1108" y="228" class="section">桂林阳朔 4 天 3 晚</text>
+  <rect class="chip" x="1348" y="202" width="64" height="32"/>
+  <text class="chipText" x="1364" y="223">只读</text>
+  <rect class="chip" x="1418" y="202" width="64" height="32"/>
+  <text class="chipText" x="1435" y="223">编辑</text>
+  <rect class="btn" x="1488" y="202" width="34" height="32"/>
+  <text class="btnText" x="1497" y="223">改</text>
+  <rect class="input" x="1108" y="254" width="190" height="160"/>
+  <path class="mapLine" d="M1132 372 C1168 310, 1200 354, 1238 286 S1280 334, 1274 388"/>
+  <circle class="jade" cx="1132" cy="372" r="8"/>
+  <circle class="amber" cx="1200" cy="354" r="8"/>
+  <circle class="red" cx="1238" cy="286" r="8"/>
+  <text x="1128" y="286" class="smallHead">路线地图</text>
+  <rect class="input" x="1316" y="254" width="196" height="160"/>
+  <text x="1336" y="286" class="smallHead">预算与概览</text>
+  <rect class="chip" x="1336" y="310" width="72" height="28"/>
+  <text class="chipText" x="1350" y="329">交通 ¥820</text>
+  <rect class="chip" x="1336" y="348" width="72" height="28"/>
+  <text class="chipText" x="1350" y="367">住宿 ¥900</text>
+  <rect class="warn" x="1336" y="386" width="92" height="22"/>
+  <text class="warnText" x="1346" y="402">冲突检测</text>
+  <rect class="chip" x="1108" y="436" width="52" height="30"/>
+  <text class="chipText" x="1124" y="456">D1</text>
+  <rect class="chip" x="1170" y="436" width="52" height="30"/>
+  <text class="chipText" x="1186" y="456">D2</text>
+  <rect class="chip" x="1232" y="436" width="52" height="30"/>
+  <text class="chipText" x="1248" y="456">D3</text>
+  <rect class="chip" x="1294" y="436" width="52" height="30"/>
+  <text class="chipText" x="1310" y="456">D4</text>
+
+  <rect class="input" x="1108" y="488" width="404" height="362"/>
+  <text x="1130" y="520" class="section">每日行程编辑器</text>
+  <rect class="soft" x="1130" y="542" width="360" height="48"/>
+  <text x="1150" y="572" class="label">D2 阳朔轻松路线 · 住宿 西街附近</text>
+  <rect class="chip" x="1130" y="608" width="68" height="28"/>
+  <text class="chipText" x="1144" y="627">交通</text>
+  <rect class="input" x="1210" y="602" width="280" height="40"/>
+  <text x="1228" y="627" class="tiny">桂林站 → 阳朔 · 09:00-10:40 · ¥120</text>
+  <rect class="chip" x="1130" y="654" width="68" height="28"/>
+  <text class="chipText" x="1144" y="673">景点</text>
+  <rect class="input" x="1210" y="648" width="280" height="40"/>
+  <text x="1228" y="673" class="tiny">遇龙河骑行 · 14:00-16:00 · ¥80</text>
+  <rect class="chip" x="1130" y="700" width="68" height="28"/>
+  <text class="chipText" x="1144" y="719">餐饮</text>
+  <rect class="input" x="1210" y="694" width="280" height="40"/>
+  <text x="1228" y="719" class="tiny">啤酒鱼 · 推荐菜 · 人均 ¥90</text>
+  <rect class="chip" x="1130" y="746" width="68" height="28"/>
+  <text class="chipText" x="1144" y="765">住宿</text>
+  <rect class="input" x="1210" y="740" width="280" height="40"/>
+  <text x="1228" y="765" class="tiny">西街精品客栈 · 1间 · ¥320</text>
+  <rect class="warn" x="1130" y="802" width="156" height="28"/>
+  <text class="warnText" x="1144" y="822">校验警告：时间重叠</text>
+  <rect class="btn" x="1322" y="794" width="168" height="44"/>
+  <text class="btnText" x="1360" y="822">保存为新版本</text>
+
+  <!-- Conflict modal -->
+  <rect x="506" y="776" width="360" height="138" rx="16" fill="#ffffff" stroke="#e7b25a" stroke-width="2" filter="url(#shadow)"/>
+  <text x="532" y="812" class="section">版本冲突</text>
+  <text x="532" y="842" class="muted">当前会话已有更新版本，是否继续另存？</text>
+  <rect class="chip" x="532" y="864" width="126" height="34"/>
+  <text class="chipText" x="548" y="886">刷新到最新版本</text>
+  <rect class="btn" x="674" y="864" width="118" height="34"/>
+  <text class="btnText" x="694" y="886">仍另存新版本</text>
+</svg>
