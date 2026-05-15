@@ -1,6 +1,7 @@
 __pycache__/
 cache/
 logs/
+travel_memory.sqlite
 12306.py
 
 # config

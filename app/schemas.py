@@ -16,6 +16,7 @@ class PlanRequest(BaseModel):
     days: int | None = Field(default=None, ge=1, le=30, description="行程天数")
     people_number: int | None = Field(default=None, ge=1, le=50, description="出行人数")
     budget: int | None = Field(default=None, ge=1, description="总预算，单位人民币")
+    use_realtime: bool | None = Field(default=None, description="是否在本次请求中启用 Tavily 实时攻略")
 
     @field_validator("query")
     @classmethod

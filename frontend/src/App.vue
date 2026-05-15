@@ -275,7 +275,7 @@ onBeforeUnmount(stopProgress);
     </header>
 
     <section class="workspace-grid">
-      <PlannerComposer :disabled="isGenerating" @submit-plan="handleSubmit" />
+      <PlannerComposer :disabled="isGenerating" :runtime-health="runtimeHealth" @submit-plan="handleSubmit" />
       <PlannerResults
         :is-generating="isGenerating"
         :status-label="statusLabel"

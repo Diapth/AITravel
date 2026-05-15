@@ -84,6 +84,7 @@ watch(
   () => props.activePointId,
   () => {
     updateMarkerState();
+    focusActivePoint();
   },
 );
 
@@ -345,6 +346,13 @@ function updateMarkerState() {
   markers.forEach(({ marker, point }) => {
     marker.setContent(markerContent(point, point.id === props.activePointId));
   });
+}
+
+function focusActivePoint() {
+  if (!mapInstance || !props.activePointId) return;
+  const active = markers.find((item) => item.point.id === props.activePointId);
+  if (!active) return;
+  mapInstance.setZoomAndCenter(15, active.point.lnglat);
 }
 
 function clearOverlays() {

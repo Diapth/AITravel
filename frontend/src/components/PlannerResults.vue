@@ -7,9 +7,12 @@ import {
   ChevronDown,
   Clock3,
   Download,
+  ExternalLink,
   Hotel,
+  Info,
   LoaderCircle,
   MapPin,
+  Navigation,
   Share2,
   Sparkles,
   Sun,
@@ -21,7 +24,7 @@ import {
 } from "lucide-vue-next";
 import AmapRoutePanel from "./AmapRoutePanel.vue";
 import type { RoutePoint } from "../types/route";
-import type { BudgetBreakdown, PlanActivity, PlanDay, PlanRequest, PlanResponse, TravelPlan } from "../services/planner";
+import type { BudgetBreakdown, PlanActivity, PlanDay, PlanRequest, PlanResponse, RealtimeEvidence, TravelPlan } from "../services/planner";
 
 interface ProgressDay {
   day: number;
@@ -41,7 +44,7 @@ const props = defineProps<{
 }>();
 
 const actionMessage = ref("");
-const selectedTab = ref<number | "overview">(1);
+const selectedTab = ref<number | "overview">("overview");
 const activePointId = ref("");
 
 const plan = computed<TravelPlan | undefined>(() => {
@@ -137,6 +140,24 @@ const displayedActivityRows = computed(() => {
     }));
   });
 });
+const activeActivityRow = computed(() => {
+  const match = activePointId.value.match(/^day-(\d+)-activity-(\d+)-/);
+  if (!match) return displayedActivityRows.value[0];
+  const dayNumber = Number(match[1]);
+  const activityIndex = Number(match[2]);
+  return displayedActivityRows.value.find((row) => row.dayNumber === dayNumber && row.activityIndex === activityIndex) || displayedActivityRows.value[0];
+});
+const activeActivity = computed(() => activeActivityRow.value?.activity);
+const activePlaceTitle = computed(() => (activeActivity.value ? activityPlace(activeActivity.value) : displayLocationText.value));
+const activePlaceGuide = computed(() => buildActivityGuide(activeActivity.value));
+const realtimeEvidence = computed<RealtimeEvidence[]>(() => props.response?.meta?.realtime?.evidence || []);
+const realtimeStatusText = computed(() => {
+  const realtime = props.response?.meta?.realtime;
+  if (!realtime?.enabled) return "实时攻略未开启";
+  if (realtime.error) return "实时攻略暂不可用";
+  if (realtimeEvidence.value.length) return realtime.cache_hit ? "来自缓存" : "刚刚检索";
+  return "已检索，暂无可展示来源";
+});
 const totalBudget = computed(() => {
   const summed = selectedTab.value === "overview" ? itinerary.value.reduce((sum, day) => sum + budgetTotal(day), 0) : selectedDay.value ? budgetTotal(selectedDay.value) : 0;
   const planTotal = Number(plan.value?.total_cost);
@@ -163,7 +184,7 @@ watch(
   itinerary,
   (days) => {
     if (!days.length) {
-      selectedTab.value = 1;
+      selectedTab.value = "overview";
       activePointId.value = "";
       return;
     }
@@ -324,6 +345,32 @@ function tabLabel(tab: number | "overview") {
   return tab === "overview" ? "总览" : `第 ${tab} 天`;
 }
 
+function addDaysToIso(isoValue: string, days: number) {
+  const date = new Date(`${isoValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatTripDate(isoValue?: string) {
+  if (!isoValue) return "";
+  const date = new Date(`${isoValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return isoValue;
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function dayDateText(dayNumber: number) {
+  const departureDate = plan.value?.departure_date || props.payload?.departure_date;
+  if (!departureDate) return "";
+  return formatTripDate(addDaysToIso(departureDate, Math.max(dayNumber - 1, 0)));
+}
+
+function tabDateLabel(tab: number | "overview") {
+  if (tab === "overview") return "";
+  const text = dayDateText(tab);
+  return text ? text.replace(/^(\d{4})年/, "") : "";
+}
+
 function selectTab(tab: number | "overview") {
   selectedTab.value = tab;
 }
@@ -383,6 +430,64 @@ function pointForActivity(dayNumber: number, activityIndex: number) {
 function activateActivity(dayNumber: number, activityIndex: number) {
   const point = pointForActivity(dayNumber, activityIndex);
   activePointId.value = point?.id || "";
+}
+
+function handleMapPointSelect(id: string) {
+  activePointId.value = id;
+  const match = id.match(/^day-(\d+)-activity-/);
+  if (match) selectedTab.value = Number(match[1]);
+}
+
+function buildActivityGuide(activity?: PlanActivity) {
+  if (!activity) {
+    return {
+      label: "目的地概览",
+      summary: "点击表格中的景点、餐饮、住宿或交通节点后，这里会显示更具体的游玩提示。",
+      bullets: ["地图会自动放大到所选地点", "总览模式可查看所有天数节点", "实时攻略来源会在下方集中展示"],
+    };
+  }
+  const place = activityPlace(activity);
+  if (activity.type === "attraction") {
+    return {
+      label: "景点游玩",
+      summary: `${place} 适合安排 ${activityTime(activity)}。建议先确认预约、闭园和当日客流信息，再决定是否压缩或延长停留。`,
+      bullets: [
+        activity.recommended_food ? `附近可顺路尝试：${activity.recommended_food}` : "优先看核心展区、主园路或代表性建筑",
+        "预留 15-20 分钟给入园、安检和拍照动线",
+        "若遇到限流，可在同日活动中与附近景点互换顺序",
+      ],
+    };
+  }
+  if (activity.type === "restaurant") {
+    return {
+      label: "餐饮建议",
+      summary: `${place} 是本段行程的餐饮节点，建议按实际排队时间灵活前后移动。`,
+      bullets: [
+        activity.recommended_food ? `推荐菜：${activity.recommended_food}` : "优先选择本地招牌和出餐较快的菜品",
+        "午晚餐高峰可提前 20 分钟到店或准备备选餐厅",
+        "餐后可衔接步行距离近的景点，减少折返",
+      ],
+    };
+  }
+  if (activity.type === "accommodation") {
+    return {
+      label: activity.price_source === "estimate" ? "住宿估算" : "住宿参考",
+      summary: `${place} 当前显示为${activity.price_source === "estimate" ? "按城市和预算估算" : "接口返回"}价格，建议下单前以酒店平台实时价格为准。`,
+      bullets: ["优先确认是否靠近地铁、景区或返程车站", "节假日价格波动较大，建议保留可取消选项", "晚间到店要关注前台入住截止时间"],
+    };
+  }
+  if (activity.type === "train" || activity.type === "intercity_reference") {
+    return {
+      label: "交通节点",
+      summary: `${place} 是本段交通安排，票价和余票建议以 12306 或官方渠道实时信息为准。`,
+      bullets: ["提前预留进站、安检和取票时间", "携带行李时选择换乘少、到站更近的车次", "若余票紧张，可准备相邻时间车次作为备选"],
+    };
+  }
+  return {
+    label: "活动提示",
+    summary: `${place} 可作为当前路线节点参考。`,
+    bullets: ["点击地图或表格可切换关注地点", "费用和时间均可按现场情况微调", "建议保留一个同城备选点"],
+  };
 }
 
 function formatMoney(value?: number | string) {
@@ -530,28 +635,22 @@ function saveItinerary() {
           :points="routePoints"
           :selected-day="selectedTab"
           :active-point-id="activePointId"
-          @select-point="activePointId = $event"
+          @select-point="handleMapPointSelect"
         />
 
         <aside class="route-detail-panel">
           <div class="route-tabs" role="tablist" aria-label="行程天数切换">
             <button type="button" role="tab" :class="{ active: selectedTab === 'overview' }" @click="selectTab('overview')">总览</button>
             <button v-for="day in tabDays" :key="day" type="button" role="tab" :class="{ active: selectedTab === day }" @click="selectTab(day)">
-              第 {{ day }} 天
+              <span>第 {{ day }} 天</span>
+              <small v-if="tabDateLabel(day)">{{ tabDateLabel(day) }}</small>
             </button>
           </div>
 
           <div v-if="selectedDay" class="route-day-detail">
-            <section class="route-highlight-panel" aria-label="行程亮点">
-              <h3>行程亮点</h3>
-              <div class="highlight-chips compact">
-                <span v-for="item in highlights" :key="item"><Sparkles :size="13" /> {{ item }}</span>
-              </div>
-            </section>
-
             <div class="route-day-head">
               <div>
-                <span class="day-badge">{{ tabLabel(selectedTab) }}</span>
+                <span class="day-badge">{{ tabLabel(selectedTab) }}<small v-if="tabDateLabel(selectedTab)">{{ tabDateLabel(selectedTab) }}</small></span>
                 <h3>{{ selectedTab === "overview" ? "全部路线总览" : dayTitle(selectedDay, selectedDayIndex) }}</h3>
                 <p>{{ selectedTab === "overview" ? "所有天数的地标会同时显示在左侧地图，预算按全部天数汇总。" : selectedDayRouteText || daySummary(selectedDay) }}</p>
               </div>
@@ -572,39 +671,80 @@ function saveItinerary() {
               <span><Hotel :size="15" /> 住宿：{{ accommodationText }}</span>
             </div>
 
-            <div class="route-table" :class="{ 'is-overview': selectedTab === 'overview' }" role="table" :aria-label="selectedTab === 'overview' ? '全部行程表' : '当天行程表'">
-              <div class="route-table-head" role="row">
-                <span v-if="selectedTab === 'overview'">天数</span>
-                <span>时间</span>
-                <span>类型</span>
-                <span>地点与活动</span>
-                <span>费用</span>
+            <div class="route-content-grid">
+              <div class="route-table" :class="{ 'is-overview': selectedTab === 'overview' }" role="table" :aria-label="selectedTab === 'overview' ? '全部行程表' : '当天行程表'">
+                <div class="route-table-head" role="row">
+                  <span v-if="selectedTab === 'overview'">天数</span>
+                  <span>时间</span>
+                  <span>类型</span>
+                  <span>地点与活动</span>
+                  <span>费用</span>
+                </div>
+                <div class="route-table-body">
+                  <button
+                    v-for="row in displayedActivityRows"
+                    :key="row.key"
+                    class="route-table-row"
+                    :class="{ active: pointForActivity(row.dayNumber, row.activityIndex)?.id === activePointId, 'is-overview-row': selectedTab === 'overview' }"
+                    type="button"
+                    role="row"
+                    @click="activateActivity(row.dayNumber, row.activityIndex)"
+                  >
+                    <span v-if="selectedTab === 'overview'" class="route-day-index">D{{ row.dayNumber }}</span>
+                    <time>{{ activityTime(row.activity) }}</time>
+                    <span><component :is="activityIcon(row.activity.type)" :size="15" /> {{ activityTypeLabel(row.activity.type) || "活动" }}</span>
+                    <strong>{{ activityPlace(row.activity) }}<small>{{ activityMeta(row.activity) }}</small><small v-if="row.activity.recommended_food">推荐：{{ row.activity.recommended_food }}</small></strong>
+                    <b>{{ activityCostText(row.activity) }}</b>
+                  </button>
+                </div>
               </div>
-              <button
-                v-for="row in displayedActivityRows"
-                :key="row.key"
-                class="route-table-row"
-                :class="{ active: pointForActivity(row.dayNumber, row.activityIndex)?.id === activePointId, 'is-overview-row': selectedTab === 'overview' }"
-                type="button"
-                role="row"
-                @click="activateActivity(row.dayNumber, row.activityIndex)"
-              >
-                <span v-if="selectedTab === 'overview'" class="route-day-index">D{{ row.dayNumber }}</span>
-                <time>{{ activityTime(row.activity) }}</time>
-                <span><component :is="activityIcon(row.activity.type)" :size="15" /> {{ activityTypeLabel(row.activity.type) || "活动" }}</span>
-                <strong>{{ activityPlace(row.activity) }}<small>{{ activityMeta(row.activity) }}</small><small v-if="row.activity.recommended_food">推荐：{{ row.activity.recommended_food }}</small></strong>
-                <b>{{ activityCostText(row.activity) }}</b>
-              </button>
-            </div>
 
-            <section class="route-tip-panel">
-              <Sun :size="18" />
-              <div>
-                <h3>住宿与提示</h3>
-                <p>{{ accommodationText }}；预算充足时可加入购物、茶馆或夜游体验。</p>
-              </div>
-            </section>
+            </div>
           </div>
+        </aside>
+
+        <aside class="route-intel-panel" aria-label="攻略与景点介绍">
+                <section class="spot-card">
+                  <div class="spot-card-head">
+                    <span><Navigation :size="14" /> {{ activePlaceGuide.label }}</span>
+                    <b>{{ activePlaceTitle }}</b>
+                  </div>
+                  <p>{{ activePlaceGuide.summary }}</p>
+                  <ul>
+                    <li v-for="item in activePlaceGuide.bullets" :key="item">{{ item }}</li>
+                  </ul>
+                </section>
+
+                <section class="route-highlight-panel" aria-label="行程亮点">
+                  <h3>行程亮点</h3>
+                  <div class="highlight-chips compact">
+                    <span v-for="item in highlights" :key="item"><Sparkles :size="13" /> {{ item }}</span>
+                  </div>
+                </section>
+
+                <section class="realtime-guide-panel" aria-label="Tavily 热门攻略">
+                  <div class="guide-panel-head">
+                    <h3><Info :size="15" /> 热门攻略</h3>
+                    <span>{{ realtimeStatusText }}</span>
+                  </div>
+                  <div v-if="realtimeEvidence.length" class="guide-list">
+                    <a v-for="item in realtimeEvidence" :key="item.url" :href="item.url" target="_blank" rel="noreferrer">
+                      <strong>{{ item.title }}</strong>
+                      <small>{{ item.source }} · 置信 {{ Math.round(item.confidence * 100) }}%</small>
+                      <p>{{ item.content_summary || "来源未提供摘要，可打开链接查看。" }}</p>
+                      <ExternalLink :size="14" />
+                    </a>
+                  </div>
+                  <p v-else class="guide-empty">本次暂无可展示攻略来源；可打开实时搜索开关或换更具体的目的地关键词。</p>
+                </section>
+
+                <section class="route-tip-panel">
+                  <Sun :size="18" />
+                  <div>
+                    <h3>住宿与提示</h3>
+                    <p>{{ accommodationText }}；预算充足时可加入购物、茶馆或夜游体验。</p>
+                  </div>
+                </section>
         </aside>
       </section>
     </div>
