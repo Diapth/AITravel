@@ -271,14 +271,14 @@ python -m pytest tests/test_travel_memory.py tests/test_conversation_api.py -q
 
 任务：
 
-- [ ] 先做静态 fallback 推荐：
+- [x] 先做静态 fallback 推荐：
   - 无历史数据时 `GET /api/recommended-plans` 返回静态样例。
   - 样例必须可直接打开为 conversation。
 - [ ] 推荐来源分层：
   - 优先返回 `plan_versions` 中高质量版本。
   - 其次 fallback 到旧 `trip_plans`。
   - 最后 fallback 到静态样例，如“桂林阳朔 4 天 3 晚”。
-- [ ] 推荐卡片字段：
+- [x] 推荐卡片字段：
   - `id`
   - `title`
   - `summary`
@@ -286,7 +286,7 @@ python -m pytest tests/test_travel_memory.py tests/test_conversation_api.py -q
   - `plan`
   - 可选 `conversation_id`
   - 可选 `version_id`
-- [ ] 点击推荐后立即创建 conversation：
+- [x] 点击推荐后立即创建 conversation：
   - 创建一条 assistant message：`已打开推荐行程，可继续告诉我你想怎么调整。`
   - 创建 `source = "recommended"` 的首个 plan version。
   - conversation title 来源于推荐标题。

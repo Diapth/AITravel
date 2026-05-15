@@ -21,6 +21,7 @@ from app.schemas import (
     ImageSearchResponse,
     PlanRequest,
     PlanResponse,
+    RecommendedPlansResponse,
 )
 from app.train_12306 import Train12306Client, Train12306Error, train_demo_error, train_demo_response
 from app.travel_memory import TravelMemoryStore
@@ -119,6 +120,28 @@ def health() -> dict:
 @app.get("/api/conversations", response_model=ConversationListResponse, response_model_exclude_none=True)
 def list_conversations() -> ConversationListResponse:
     return ConversationListResponse(success=True, conversations=TravelMemoryStore().list_conversations())
+
+
+@app.get("/api/recommended-plans", response_model=RecommendedPlansResponse, response_model_exclude_none=True)
+def recommended_plans() -> RecommendedPlansResponse:
+    return RecommendedPlansResponse(success=True, recommendations=TravelMemoryStore().recommended_plans())
+
+
+@app.post(
+    "/api/recommended-plans/{recommendation_id}/open",
+    response_model=ConversationDetailResponse,
+    response_model_exclude_none=True,
+)
+def open_recommended_plan(recommendation_id: str) -> ConversationDetailResponse:
+    store = TravelMemoryStore()
+    try:
+        detail = store.open_recommended_plan(recommendation_id)
+    except ValueError:
+        return ConversationDetailResponse(
+            success=False,
+            error=ErrorPayload(code="RECOMMENDATION_NOT_FOUND", message="未找到对应推荐行程。"),
+        )
+    return ConversationDetailResponse(success=True, **detail)
 
 
 @app.post("/api/conversations", response_model=ConversationDetailResponse, response_model_exclude_none=True)

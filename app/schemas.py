@@ -195,6 +195,22 @@ class ConversationMessageResponse(BaseModel):
     error: ErrorPayload | None = None
 
 
+class RecommendationItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    plan: dict[str, Any]
+    source: str
+    conversation_id: str | None = None
+    version_id: str | None = None
+
+
+class RecommendedPlansResponse(BaseModel):
+    success: bool
+    recommendations: list[RecommendationItem] = Field(default_factory=list)
+    error: ErrorPayload | None = None
+
+
 class PlanResponse(BaseModel):
     success: bool
     plan: dict[str, Any] | None = None

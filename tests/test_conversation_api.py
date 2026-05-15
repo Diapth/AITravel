@@ -129,3 +129,23 @@ def test_conversation_message_generates_first_plan_when_empty(tmp_path, monkeypa
     assert data["success"] is True
     assert data["current_plan"]["target_city"] == "成都"
     assert data["version"]["version_number"] == 1
+
+
+def test_recommended_plans_return_static_fallback_and_open(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    client = TestClient(app)
+
+    response = client.get("/api/recommended-plans")
+    recommendations = response.json()["recommendations"]
+    open_response = client.post(f"/api/recommended-plans/{recommendations[0]['id']}/open")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert recommendations[0]["id"] == "sample-guilin-yangshuo"
+    assert recommendations[0]["plan"]["target_city"] == "桂林、阳朔"
+    assert open_response.status_code == 200
+    opened = open_response.json()
+    assert opened["success"] is True
+    assert opened["conversation"]["title"] == recommendations[0]["title"]
+    assert opened["versions"][0]["source"] == "recommended"
+    assert opened["messages"][0]["content"] == "已打开推荐行程，可继续告诉我你想怎么调整。"

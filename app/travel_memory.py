@@ -15,6 +15,59 @@ from chinatravel.config import get_env_value, get_int_env
 
 DEFAULT_MEMORY_DB = "travel_memory.sqlite"
 BUDGET_BUCKETS = (500, 1000, 1500, 3000)
+STATIC_RECOMMENDED_PLANS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "sample-guilin-yangshuo",
+        "title": "桂林阳朔 4 天 3 晚",
+        "summary": "漓江竹筏、遇龙河骑行和当地美食，适合轻松自然风光游。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "桂林、阳朔",
+            "target_cities": ["桂林", "阳朔"],
+            "days": 4,
+            "people_number": 2,
+            "budget": 3400,
+            "total_cost": 3200,
+            "llm_summary": "桂林阳朔四天三晚，兼顾山水、骑行和美食。",
+            "itinerary": [],
+        },
+    },
+    {
+        "id": "sample-chengdu-food",
+        "title": "成都美食 3 天 2 晚",
+        "summary": "茶馆、川菜、街区漫游和宽松节奏，适合中等预算。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "成都",
+            "target_cities": ["成都"],
+            "days": 3,
+            "people_number": 2,
+            "budget": 2800,
+            "total_cost": 2500,
+            "llm_summary": "成都三天两晚美食体验路线。",
+            "itinerary": [],
+        },
+    },
+    {
+        "id": "sample-suzhou-weekend",
+        "title": "苏州周末 2 天 1 晚",
+        "summary": "园林、评弹、平江路和轻量交通，适合周末短途。",
+        "source": "sample",
+        "plan": {
+            "start_city": "上海",
+            "target_city": "苏州",
+            "target_cities": ["苏州"],
+            "days": 2,
+            "people_number": 2,
+            "budget": 1300,
+            "total_cost": 1100,
+            "llm_summary": "苏州周末两天一晚轻松路线。",
+            "itinerary": [],
+        },
+    },
+)
 PII_PATTERNS = (
     re.compile(r"1[3-9]\d{9}"),
     re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
@@ -47,6 +100,23 @@ def redact_query(query: str) -> str:
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _plan_card_title(plan: dict[str, Any]) -> str:
+    target = plan.get("target_city") or "推荐行程"
+    days = plan.get("days")
+    if days:
+        return f"{target} {days} 天"
+    return str(target)
+
+
+def _plan_card_summary(plan: dict[str, Any]) -> str:
+    summary = plan.get("llm_summary") or plan.get("summary")
+    if summary:
+        return str(summary)[:160]
+    target = plan.get("target_city") or "目的地"
+    days = plan.get("days") or "多"
+    return f"{target}{days}天行程，可继续聊天修改。"
 
 
 def _bucket_budget(value: int | None) -> str:
@@ -497,6 +567,87 @@ class TravelMemoryStore:
             parent_version_id=current_row[0],
             summary=restored_summary,
         )
+
+    def recommended_plans(self, limit: int = 6) -> list[dict[str, Any]]:
+        self.initialize()
+        recommendations: list[dict[str, Any]] = []
+        with sqlite3.connect(self.db_path) as conn:
+            version_rows = conn.execute(
+                """
+                SELECT pv.id, pv.conversation_id, pv.summary, pv.plan_json, pv.source, pv.created_at, c.title
+                FROM plan_versions pv
+                JOIN conversations c ON c.id = pv.conversation_id
+                WHERE c.status = 'active'
+                ORDER BY pv.created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            for version_id, conversation_id, summary, plan_json, source, _created_at, title in version_rows:
+                plan = json.loads(plan_json)
+                recommendations.append(
+                    {
+                        "id": f"version-{version_id}",
+                        "title": title,
+                        "summary": summary or _plan_card_summary(plan),
+                        "source": source,
+                        "plan": plan,
+                        "conversation_id": conversation_id,
+                        "version_id": version_id,
+                    }
+                )
+            if len(recommendations) < limit:
+                trip_rows = conn.execute(
+                    """
+                    SELECT id, plan_summary, plan_json, source_agent
+                    FROM trip_plans
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit - len(recommendations),),
+                ).fetchall()
+                for plan_id, summary, plan_json, source_agent in trip_rows:
+                    plan = json.loads(plan_json)
+                    recommendations.append(
+                        {
+                            "id": f"trip-{plan_id}",
+                            "title": _plan_card_title(plan),
+                            "summary": summary or _plan_card_summary(plan),
+                            "source": source_agent or "trip_memory",
+                            "plan": plan,
+                        }
+                    )
+        if len(recommendations) < limit:
+            for item in STATIC_RECOMMENDED_PLANS:
+                if len(recommendations) >= limit:
+                    break
+                recommendations.append(dict(item))
+        return recommendations
+
+    def open_recommended_plan(self, recommendation_id: str) -> dict[str, Any]:
+        recommendation = next(
+            (item for item in self.recommended_plans(limit=30) if item["id"] == recommendation_id),
+            None,
+        )
+        if recommendation is None:
+            raise ValueError("Recommendation not found")
+        conversation = self.create_conversation(title=recommendation["title"])
+        version = self.create_plan_version(
+            conversation["id"],
+            recommendation["plan"],
+            source="recommended",
+            summary=recommendation["summary"],
+        )
+        self.append_message(
+            conversation["id"],
+            "assistant",
+            "已打开推荐行程，可继续告诉我你想怎么调整。",
+            plan_version_id=version["id"],
+        )
+        detail = self.get_conversation(conversation["id"])
+        if detail is None:
+            raise ValueError("Conversation not found after opening recommendation")
+        return detail
 
     def write_trip(
         self,
