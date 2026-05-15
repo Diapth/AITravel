@@ -23,11 +23,15 @@ PII_PATTERNS = (
 
 
 def get_memory_db_path() -> Path:
-    value = get_env_value("CHINATRAVEL_TRIP_MEMORY_DB") or DEFAULT_MEMORY_DB
+    value = (
+        get_env_value("CHINATRAVEL_MEMORY_DB_PATH")
+        or get_env_value("CHINATRAVEL_TRIP_MEMORY_DB")
+        or DEFAULT_MEMORY_DB
+    )
     path = Path(value)
     if path.is_absolute():
-        return path
-    return Path(__file__).resolve().parent.parent / path
+        return path.resolve()
+    return (Path(__file__).resolve().parent.parent / path).resolve()
 
 
 def utc_now_iso() -> str:

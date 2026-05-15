@@ -490,6 +490,27 @@ def test_fetch_realtime_context_retries_when_first_query_is_empty(tmp_path, monk
     assert "\u5b98\u65b9\u516c\u544a" in calls[1]
 
 
+def test_fetch_realtime_context_reports_empty_evidence_reason(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAVILY_REAL_TIME_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+
+    class EmptyTavilyClient:
+        def search(self, *args, **kwargs):
+            from app.realtime.tavily_client import TavilySearchResult
+
+            return TavilySearchResult(success=True, evidence=[], usage={"credits": 1})
+
+    monkeypatch.setattr(planner_module, "TavilySearchClient", lambda: EmptyTavilyClient())
+
+    evidence, meta = planner_module.fetch_realtime_context(PlanRequest(query="苏州两日游", target_city="苏州"))
+
+    assert evidence == []
+    assert meta["success"] is True
+    assert meta["evidence_count"] == 0
+    assert meta["empty_reason"] == "NO_RELIABLE_EVIDENCE"
+    assert meta["error"] is None
+
+
 def test_fetch_realtime_context_exposes_evidence_in_meta(tmp_path, monkeypatch):
     monkeypatch.setenv("TAVILY_REAL_TIME_ENABLED", "true")
     monkeypatch.setenv("CHINATRAVEL_TRIP_MEMORY_DB", str(tmp_path / "memory.sqlite"))

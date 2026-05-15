@@ -1,7 +1,7 @@
 import sqlite3
 
 from app.schemas import PlanRequest
-from app.travel_memory import TravelMemoryStore, redact_query, request_fingerprint
+from app.travel_memory import TravelMemoryStore, get_memory_db_path, redact_query, request_fingerprint
 
 
 def test_redact_query_masks_common_pii():
@@ -48,3 +48,20 @@ def test_travel_memory_writes_request_plan_and_route_stats(tmp_path):
     assert "13800138000" not in request_row[0]
     assert plan_row == (900.0, 1, "test-agent")
     assert stats_row == (1,)
+
+
+def test_memory_db_path_prefers_new_env_var(tmp_path, monkeypatch):
+    new_path = tmp_path / "new-memory.sqlite"
+    old_path = tmp_path / "old-memory.sqlite"
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(new_path))
+    monkeypatch.setenv("CHINATRAVEL_TRIP_MEMORY_DB", str(old_path))
+
+    assert get_memory_db_path() == new_path.resolve()
+
+
+def test_memory_db_path_keeps_legacy_env_fallback(tmp_path, monkeypatch):
+    old_path = tmp_path / "legacy-memory.sqlite"
+    monkeypatch.delenv("CHINATRAVEL_MEMORY_DB_PATH", raising=False)
+    monkeypatch.setenv("CHINATRAVEL_TRIP_MEMORY_DB", str(old_path))
+
+    assert get_memory_db_path() == old_path.resolve()
