@@ -439,14 +439,55 @@ def test_planner_records_tavily_failure_without_blocking_plan(tmp_path, monkeypa
     assert result["meta"]["memory_write"]["success"] is True
 
 
-def test_realtime_search_query_uses_tavily_safe_english_terms():
+def test_realtime_search_query_uses_travel_guide_terms():
     request = PlanRequest(query="请给我规划一个苏州两日游", target_city="苏州")
 
     query = planner_module._realtime_search_query(request)
 
     assert "苏州" in query
-    assert "latest official notice" in query
-    assert "temporary closure" in query
+    assert "\u65c5\u884c\u653b\u7565" in query
+    assert "\u7f8e\u98df" in query
+    assert "\u4f4f\u5bbf" in query
+
+
+def test_fetch_realtime_context_retries_when_first_query_is_empty(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAVILY_REAL_TIME_ENABLED", "true")
+    monkeypatch.setenv("CHINATRAVEL_TRIP_MEMORY_DB", str(tmp_path / "memory.sqlite"))
+    calls = []
+
+    class FakeTavilyClient:
+        def search(self, query, *args, **kwargs):
+            calls.append(query)
+            from app.realtime.evidence import normalize_evidence
+            from app.realtime.tavily_client import TavilySearchResult
+
+            if len(calls) == 1:
+                return TavilySearchResult(success=True, evidence=[], usage={"credits": 1})
+            return TavilySearchResult(
+                success=True,
+                evidence=normalize_evidence(
+                    [
+                        {
+                            "title": "Suzhou guide",
+                            "url": "https://example.com/guide",
+                            "content": "Updated attraction and food tips.",
+                            "score": 0.8,
+                        }
+                    ]
+                ),
+                usage={"credits": 2},
+            )
+
+    monkeypatch.setattr(planner_module, "TavilySearchClient", lambda: FakeTavilyClient())
+
+    evidence, meta = planner_module.fetch_realtime_context(
+        PlanRequest(query="\u82cf\u5dde\u4e24\u65e5\u6e38", target_city="\u82cf\u5dde")
+    )
+
+    assert len(evidence) == 1
+    assert len(calls) == 2
+    assert meta["searched_queries"] == calls
+    assert "\u5b98\u65b9\u516c\u544a" in calls[1]
 
 
 def test_fetch_realtime_context_exposes_evidence_in_meta(tmp_path, monkeypatch):
@@ -762,6 +803,62 @@ def test_amap_fallback_respects_late_train_arrival_and_city_bounds(monkeypatch):
     )
 
 
+def test_planner_reports_no_train_inventory_when_12306_has_no_available_ticket(monkeypatch):
+    planner = ChinaTravelPlanner()
+    request = PlanRequest(
+        query="\u8bf7\u89c4\u5212\u4e0a\u6d77\u5230\u6842\u6797\u4e24\u5929\u4e00\u665a",
+        start_city="\u4e0a\u6d77",
+        target_city="\u6842\u6797",
+        days=2,
+        people_number=2,
+        budget=3000,
+    )
+
+    class FakeAgent:
+        def run(self, *args, **kwargs):
+            return False, {"error_info": "Unsupported cities"}
+
+    class FakeAmapClient:
+        def search_pois(self, city, keywords, page_size=10):
+            if keywords == "\u666f\u70b9":
+                return [
+                    {"name": f"{city}\u666f\u70b9A", "address": city, "business": {"cost": "0"}},
+                    {"name": f"{city}\u666f\u70b9B", "address": city, "business": {"cost": "0"}},
+                ]
+            if keywords in ("\u9910\u5385", "\u7f8e\u98df", "\u5f53\u5730\u7f8e\u98df"):
+                return [{"name": f"{city}\u9910\u5385", "address": city, "business": {"cost": "80"}}]
+            if keywords in ("\u9152\u5e97", f"{city}\u9152\u5e97", "\u4f4f\u5bbf"):
+                return [{"name": f"{city}\u9152\u5e97", "address": city, "business": {"cost": "300"}}]
+            return []
+
+        def weather(self, city):
+            return {"lives": [{"city": city, "weather": "\u6674"}]}
+
+    class EmptyTrainClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def query_tickets(self, *args, **kwargs):
+            return {"items": []}
+
+    monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
+    monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
+    monkeypatch.setattr(planner_module, "Train12306Client", EmptyTrainClient)
+    monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
+
+    result = planner.plan(request)
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "TRAIN_TICKETS_UNAVAILABLE"
+    assert "\u706b\u8f66\u4f59\u7968" in result["error"]["message"]
+
+
 def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
     planner = ChinaTravelPlanner()
     request = PlanRequest(
@@ -796,7 +893,7 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
         def weather(self, city):
             return {"lives": [{"city": city, "weather": "晴"}]}
 
-    class EmptyTrainClient:
+    class FakeTrainClient:
         def __init__(self, *args, **kwargs):
             pass
 
@@ -806,12 +903,25 @@ def test_planner_uses_amap_fallback_for_joined_multi_destination(monkeypatch):
         def __exit__(self, *args):
             return None
 
-        def query_tickets(self, *args, **kwargs):
-            return {"items": []}
+        def query_tickets(self, date, from_station, to_station, *args, **kwargs):
+            return {
+                "items": [
+                    {
+                        "train_code": "G100",
+                        "from_station": from_station,
+                        "to_station": to_station,
+                        "depart_time": "08:00",
+                        "arrive_time": "12:00",
+                        "duration": "04:00",
+                        "prices": {"second": "楼320.0"},
+                        "seats": {"second": {"left": "有"}},
+                    }
+                ]
+            }
 
     monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
     monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
-    monkeypatch.setattr(planner_module, "Train12306Client", EmptyTrainClient)
+    monkeypatch.setattr(planner_module, "Train12306Client", FakeTrainClient)
     monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
 
     result = planner.plan(request)
@@ -863,7 +973,7 @@ def test_planner_uses_amap_fallback_for_joined_target_cities_payload(monkeypatch
         def weather(self, city):
             return {"lives": [{"city": city, "weather": "晴"}]}
 
-    class EmptyTrainClient:
+    class FakeTrainClient:
         def __init__(self, *args, **kwargs):
             pass
 
@@ -873,12 +983,25 @@ def test_planner_uses_amap_fallback_for_joined_target_cities_payload(monkeypatch
         def __exit__(self, *args):
             return None
 
-        def query_tickets(self, *args, **kwargs):
-            return {"items": []}
+        def query_tickets(self, date, from_station, to_station, *args, **kwargs):
+            return {
+                "items": [
+                    {
+                        "train_code": "G100",
+                        "from_station": from_station,
+                        "to_station": to_station,
+                        "depart_time": "08:00",
+                        "arrive_time": "12:00",
+                        "duration": "04:00",
+                        "prices": {"second": "楼320.0"},
+                        "seats": {"second": {"left": "有"}},
+                    }
+                ]
+            }
 
     monkeypatch.setattr(planner, "_load_agent", lambda: FakeAgent())
     monkeypatch.setattr(planner_module, "AmapDemoClient", lambda: FakeAmapClient())
-    monkeypatch.setattr(planner_module, "Train12306Client", EmptyTrainClient)
+    monkeypatch.setattr(planner_module, "Train12306Client", FakeTrainClient)
     monkeypatch.setattr(planner_module, "fetch_business_district_context", lambda target_city: [])
 
     result = planner.plan(request)

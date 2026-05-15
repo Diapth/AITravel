@@ -98,6 +98,8 @@ export interface PlanMeta {
     provider?: string;
     cache_hit?: boolean;
     query?: string;
+    fallback_queries?: string[];
+    searched_queries?: string[];
     success?: boolean;
     evidence_count?: number;
     evidence?: RealtimeEvidence[];

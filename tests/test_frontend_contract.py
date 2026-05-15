@@ -195,6 +195,8 @@ def test_frontend_exposes_realtime_toggle_dates_and_validation_dialog():
     assert "TAVILY_REAL_TIME_ENABLED=true" in composer_vue
     assert "defaultDepartureDate" in composer_vue
     assert "defaultReturnDate" in composer_vue
+    assert "ensureFormDates" in composer_vue
+    assert ':clearable="false"' in composer_vue
     assert "validateForm" in composer_vue
     assert "validation-dialog" in composer_vue
     assert "tabDateLabel" in results_vue

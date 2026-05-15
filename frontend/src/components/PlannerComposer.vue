@@ -225,6 +225,15 @@ function handleDepartureDateChange() {
   }
 }
 
+function ensureFormDates() {
+  if (!form.departure_date) {
+    form.departure_date = defaultDepartureDate();
+  }
+  if (!form.return_date) {
+    form.return_date = defaultReturnDate(form.days, form.departure_date);
+  }
+}
+
 function dateDiffDays(start: string, end: string) {
   const startTime = new Date(`${start}T00:00:00`).getTime();
   const endTime = new Date(`${end}T00:00:00`).getTime();
@@ -321,6 +330,7 @@ async function extractFields() {
 }
 
 function compactPayload(): PlanRequest {
+  ensureFormDates();
   const selectedPreferences = preferences.filter((item) => item.active).map((item) => item.label);
   const queryWithPreferences =
     selectedPreferences.length > 0 ? `${form.query.trim()} 兴趣偏好：${selectedPreferences.join("、")}。` : form.query.trim();
@@ -334,6 +344,7 @@ function compactPayload(): PlanRequest {
 }
 
 function submit() {
+  ensureFormDates();
   const errors = validateForm();
   if (errors.length) {
     showValidationErrors(errors);
@@ -423,7 +434,7 @@ function submit() {
             placeholder="自动推荐"
             :prefix-icon="CalendarDays"
             :disabled="disabled"
-            clearable
+            :clearable="false"
             @change="handleDepartureDateChange"
           />
         </el-form-item>
@@ -436,7 +447,7 @@ function submit() {
             placeholder="按天数自动推算"
             :prefix-icon="CalendarDays"
             :disabled="disabled"
-            clearable
+            :clearable="false"
           />
         </el-form-item>
 
