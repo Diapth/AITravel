@@ -442,6 +442,62 @@ class TravelMemoryStore:
             "created_at": now,
         }
 
+    def archive_conversation(self, conversation_id: str) -> dict[str, Any]:
+        return self._set_conversation_status(conversation_id, "archived")
+
+    def restore_conversation(self, conversation_id: str) -> dict[str, Any]:
+        return self._set_conversation_status(conversation_id, "active")
+
+    def _set_conversation_status(self, conversation_id: str, status: str) -> dict[str, Any]:
+        self.initialize()
+        now = utc_now_iso()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE conversations SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, conversation_id),
+            )
+            cursor = conn.execute(
+                """
+                SELECT id, title, status, current_version_id, created_at, updated_at
+                FROM conversations
+                WHERE id = ?
+                """,
+                (conversation_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise ValueError("Conversation not found")
+            return self._row_to_dict(cursor, row)
+
+    def restore_version(self, conversation_id: str, version_id: str) -> dict[str, Any]:
+        self.initialize()
+        with sqlite3.connect(self.db_path) as conn:
+            current_row = conn.execute(
+                "SELECT current_version_id FROM conversations WHERE id = ?",
+                (conversation_id,),
+            ).fetchone()
+            if current_row is None:
+                raise ValueError("Conversation not found")
+            source_row = conn.execute(
+                """
+                SELECT plan_json, summary
+                FROM plan_versions
+                WHERE id = ? AND conversation_id = ?
+                """,
+                (version_id, conversation_id),
+            ).fetchone()
+            if source_row is None:
+                raise ValueError("Plan version not found")
+            plan = json.loads(source_row[0])
+            restored_summary = f"回退到：{source_row[1]}" if source_row[1] else "回退版本"
+        return self.create_plan_version(
+            conversation_id,
+            plan,
+            source="rollback",
+            parent_version_id=current_row[0],
+            summary=restored_summary,
+        )
+
     def write_trip(
         self,
         request: PlanRequest,

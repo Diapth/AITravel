@@ -143,3 +143,52 @@ def test_create_plan_version_updates_current_version(tmp_path):
     assert detail["conversation"]["current_version_id"] == version_2["id"]
     assert detail["current_plan"]["target_city"] == "阳朔"
     assert [version["version_number"] for version in detail["versions"]] == [2, 1]
+
+
+def test_list_conversations_orders_by_updated_time(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+    first = store.create_conversation(title="第一条")
+    second = store.create_conversation(title="第二条")
+    store.append_message(first["id"], "user", "更新第一条")
+
+    conversations = store.list_conversations()
+
+    assert [item["id"] for item in conversations] == [first["id"], second["id"]]
+
+
+def test_archive_and_restore_conversation(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+    conversation = store.create_conversation(title="待归档")
+
+    archived = store.archive_conversation(conversation["id"])
+    restored = store.restore_conversation(conversation["id"])
+
+    assert archived["status"] == "archived"
+    assert restored["status"] == "active"
+
+
+def test_restore_version_creates_rollback_copy(tmp_path):
+    store = TravelMemoryStore(tmp_path / "memory.sqlite")
+    conversation = store.create_conversation(title="回退")
+    version_1 = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": []},
+        source="ai_generated",
+        summary="第一版",
+    )
+    version_2 = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "杭州", "itinerary": []},
+        source="ai_edit",
+        parent_version_id=version_1["id"],
+        summary="第二版",
+    )
+
+    rollback = store.restore_version(conversation["id"], version_1["id"])
+    detail = store.get_conversation(conversation["id"])
+
+    assert rollback["source"] == "rollback"
+    assert rollback["parent_version_id"] == version_2["id"]
+    assert rollback["version_number"] == 3
+    assert detail["conversation"]["current_version_id"] == rollback["id"]
+    assert detail["current_plan"]["target_city"] == "苏州"

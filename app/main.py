@@ -10,6 +10,11 @@ from app.assistants import extract_fields_from_query, search_images
 from app.planner import get_planner
 from app.runtime_checks import check_runtime
 from app.schemas import (
+    ConversationCreateRequest,
+    ConversationDetailResponse,
+    ConversationListResponse,
+    ConversationMessageRequest,
+    ConversationMessageResponse,
     ErrorPayload,
     FieldExtractionRequest,
     FieldExtractionResponse,
@@ -18,14 +23,163 @@ from app.schemas import (
     PlanResponse,
 )
 from app.train_12306 import Train12306Client, Train12306Error, train_demo_error, train_demo_response
+from app.travel_memory import TravelMemoryStore
 
 
 app = FastAPI(title="ChinaTravel Planner", version="1.0.0")
 
 
+def _conversation_title(message: str) -> str:
+    title = message.strip().replace("\n", " ")
+    return title[:24] or "未命名行程"
+
+
+def _conversation_detail_response(store: TravelMemoryStore, conversation_id: str) -> ConversationDetailResponse:
+    detail = store.get_conversation(conversation_id)
+    if detail is None:
+        return ConversationDetailResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    return ConversationDetailResponse(success=True, **detail)
+
+
+def _plan_summary(plan: dict | None) -> str | None:
+    if not isinstance(plan, dict):
+        return None
+    summary = plan.get("llm_summary") or plan.get("summary") or plan.get("target_city")
+    return str(summary)[:160] if summary else None
+
+
+def _request_id_from_meta(meta: dict | None) -> str | None:
+    if not isinstance(meta, dict):
+        return None
+    request_id = meta.get("request_id")
+    if request_id:
+        return str(request_id)
+    memory_write = meta.get("memory_write")
+    if isinstance(memory_write, dict) and memory_write.get("request_id"):
+        return str(memory_write["request_id"])
+    return None
+
+
+def _generate_first_version(
+    store: TravelMemoryStore,
+    conversation_id: str,
+    user_message: str,
+    *,
+    user_message_row: dict | None = None,
+) -> ConversationMessageResponse:
+    planner_result = get_planner().plan(PlanRequest(query=user_message))
+    if not planner_result.get("success") or not isinstance(planner_result.get("plan"), dict):
+        detail = store.get_conversation(conversation_id)
+        return ConversationMessageResponse(
+            success=False,
+            conversation=detail["conversation"] if detail else None,
+            message=user_message_row,
+            error=ErrorPayload(
+                code=str((planner_result.get("error") or {}).get("code") or "PLANNER_FAILED"),
+                message=str((planner_result.get("error") or {}).get("message") or "行程生成失败。"),
+                details=planner_result,
+            ),
+        )
+
+    plan = planner_result["plan"]
+    request_id = _request_id_from_meta(planner_result.get("meta"))
+    version = store.create_plan_version(
+        conversation_id,
+        plan,
+        source="ai_generated",
+        request_id=request_id,
+        summary=_plan_summary(plan),
+    )
+    assistant_message = store.append_message(
+        conversation_id,
+        "assistant",
+        f"已生成第 {version['version_number']} 版行程。",
+        plan_version_id=version["id"],
+        request_id=request_id,
+    )
+    detail = store.get_conversation(conversation_id)
+    return ConversationMessageResponse(
+        success=True,
+        conversation=detail["conversation"],
+        message=user_message_row,
+        assistant_message=assistant_message,
+        version=version,
+        current_plan=detail["current_plan"],
+    )
+
+
 @app.get("/api/health")
 def health() -> dict:
     return check_runtime()
+
+
+@app.get("/api/conversations", response_model=ConversationListResponse, response_model_exclude_none=True)
+def list_conversations() -> ConversationListResponse:
+    return ConversationListResponse(success=True, conversations=TravelMemoryStore().list_conversations())
+
+
+@app.post("/api/conversations", response_model=ConversationDetailResponse, response_model_exclude_none=True)
+def create_conversation(request: ConversationCreateRequest) -> ConversationDetailResponse:
+    runtime_status = check_runtime()
+    if not runtime_status["ok"]:
+        return ConversationDetailResponse(
+            success=False,
+            error=ErrorPayload(
+                code="RUNTIME_NOT_READY",
+                message="DeepSeek key 或旅行数据库未配置完成。",
+                details=runtime_status,
+            ),
+        )
+    store = TravelMemoryStore()
+    conversation = store.create_conversation(title=_conversation_title(request.message))
+    user_message = store.append_message(conversation["id"], "user", request.message)
+    generated = _generate_first_version(store, conversation["id"], request.message, user_message_row=user_message)
+    if not generated.success:
+        return _conversation_detail_response(store, conversation["id"])
+    return _conversation_detail_response(store, conversation["id"])
+
+
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationDetailResponse, response_model_exclude_none=True)
+def get_conversation(conversation_id: str) -> ConversationDetailResponse:
+    return _conversation_detail_response(TravelMemoryStore(), conversation_id)
+
+
+@app.post(
+    "/api/conversations/{conversation_id}/messages",
+    response_model=ConversationMessageResponse,
+    response_model_exclude_none=True,
+)
+def append_conversation_message(conversation_id: str, request: ConversationMessageRequest) -> ConversationMessageResponse:
+    runtime_status = check_runtime()
+    if not runtime_status["ok"]:
+        return ConversationMessageResponse(
+            success=False,
+            error=ErrorPayload(
+                code="RUNTIME_NOT_READY",
+                message="DeepSeek key 或旅行数据库未配置完成。",
+                details=runtime_status,
+            ),
+        )
+    store = TravelMemoryStore()
+    detail = store.get_conversation(conversation_id)
+    if detail is None:
+        return ConversationMessageResponse(
+            success=False,
+            error=ErrorPayload(code="CONVERSATION_NOT_FOUND", message="未找到对应会话。"),
+        )
+    user_message = store.append_message(conversation_id, "user", request.message)
+    if detail["conversation"]["current_version_id"]:
+        updated = store.get_conversation(conversation_id)
+        return ConversationMessageResponse(
+            success=False,
+            conversation=updated["conversation"] if updated else None,
+            message=user_message,
+            error=ErrorPayload(code="AI_EDIT_NOT_IMPLEMENTED", message="已有行程的继续修改将在后续版本开放。"),
+        )
+    return _generate_first_version(store, conversation_id, request.message, user_message_row=user_message)
 
 
 @app.post("/api/extract-fields", response_model=FieldExtractionResponse, response_model_exclude_none=True)

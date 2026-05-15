@@ -111,6 +111,90 @@ class ImageSearchResponse(BaseModel):
     error: ErrorPayload | None = None
 
 
+class ConversationCreateRequest(BaseModel):
+    message: str = Field(..., description="用户发起会话的自然语言旅行需求")
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
+
+
+class ConversationMessageRequest(BaseModel):
+    message: str = Field(..., description="追加到会话中的用户消息")
+    base_version_id: str | None = None
+    conflict_override: bool = False
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str
+    status: str
+    current_version_id: str | None = None
+    created_at: str
+    updated_at: str
+    current_plan_summary: str | None = None
+
+
+class ConversationMessage(BaseModel):
+    id: str
+    conversation_id: str
+    sequence: int
+    role: str
+    content: str
+    plan_version_id: str | None = None
+    request_id: str | None = None
+    created_at: str
+
+
+class PlanVersionSummary(BaseModel):
+    id: str
+    conversation_id: str
+    version_number: int
+    parent_version_id: str | None = None
+    source: str
+    summary: str | None = None
+    total_cost: float | None = None
+    request_id: str | None = None
+    created_at: str
+
+
+class ConversationDetailResponse(BaseModel):
+    success: bool
+    conversation: ConversationSummary | None = None
+    messages: list[ConversationMessage] = Field(default_factory=list)
+    versions: list[PlanVersionSummary] = Field(default_factory=list)
+    current_plan: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+
+class ConversationListResponse(BaseModel):
+    success: bool
+    conversations: list[ConversationSummary] = Field(default_factory=list)
+    error: ErrorPayload | None = None
+
+
+class ConversationMessageResponse(BaseModel):
+    success: bool
+    conversation: ConversationSummary | None = None
+    message: ConversationMessage | None = None
+    assistant_message: ConversationMessage | None = None
+    version: PlanVersionSummary | None = None
+    current_plan: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+
 class PlanResponse(BaseModel):
     success: bool
     plan: dict[str, Any] | None = None

@@ -204,7 +204,7 @@ python -m pytest tests/test_travel_memory.py -q
 
 任务：
 
-- [ ] 扩展 `app/schemas.py`：
+- [x] 扩展 `app/schemas.py`：
   - `ConversationCreateRequest`
   - `ConversationSummary`
   - `ConversationMessage`
@@ -212,12 +212,12 @@ python -m pytest tests/test_travel_memory.py -q
   - `ConversationDetailResponse`
   - `ConversationListResponse`
   - `ConversationMessageResponse`
-- [ ] 扩展 `app/main.py` API：
+- [x] 扩展 `app/main.py` API：
   - `GET /api/conversations`
   - `POST /api/conversations`
   - `GET /api/conversations/{conversation_id}`
   - `POST /api/conversations/{conversation_id}/messages`
-- [ ] 行为约束：
+- [x] 行为约束：
   - 新会话先保存用户消息，再调用现有 `get_planner().plan(PlanRequest(query=message))`。
   - planner 成功时创建 `source = "ai_generated"` 的第 1 个版本。
   - planner 失败时保留用户消息，但不创建坏版本。
@@ -236,7 +236,7 @@ python -m pytest tests/test_conversation_api.py -q
 
 任务：
 
-- [ ] 扩展 `TravelMemoryStore`：
+- [x] 扩展 `TravelMemoryStore`：
   - `archive_conversation()`
   - `restore_conversation()`
   - `restore_version()`
