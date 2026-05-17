@@ -20,8 +20,20 @@ const sourceLabels: Record<string, string> = {
   recommended: "推荐",
 };
 
+const sourceThemes: Record<string, string> = {
+  ai_generated: "source-jade",
+  ai_edit: "source-jade",
+  manual_edit: "source-blue",
+  rollback: "source-gray",
+  recommended: "source-amber",
+};
+
 function sourceLabel(source: string) {
   return sourceLabels[source] || source;
+}
+
+function sourceTheme(source: string) {
+  return sourceThemes[source] || "source-jade";
 }
 
 function formatDate(value: string) {
@@ -46,7 +58,8 @@ function formatDate(value: string) {
         <div class="version-dot" />
         <div class="version-copy">
           <strong>第 {{ version.version_number }} 版</strong>
-          <span>{{ sourceLabel(version.source) }} · {{ formatDate(version.created_at) }}</span>
+          <span class="version-source-pill" :class="sourceTheme(version.source)">{{ sourceLabel(version.source) }}</span>
+          <span class="version-time">{{ formatDate(version.created_at) }}</span>
           <p>{{ version.summary || "完整行程快照" }}</p>
           <small v-if="version.validation_warnings?.length" class="version-risk">
             <CircleAlert :size="13" /> 风险标记 {{ version.validation_warnings.length }} 项
@@ -54,13 +67,14 @@ function formatDate(value: string) {
           <small v-if="version.total_cost">预算合计 ¥{{ Math.round(version.total_cost).toLocaleString("zh-CN") }}</small>
         </div>
         <button
-          class="mini-icon-button"
+          v-if="version.id !== currentVersionId"
+          class="version-restore-link"
           type="button"
-          :disabled="busy || version.id === currentVersionId"
+          :disabled="busy"
           aria-label="回退到此版本"
           @click="emit('restoreVersion', version.id)"
         >
-          <RotateCcw :size="15" />
+          <RotateCcw :size="13" /> 回退
         </button>
       </article>
     </div>

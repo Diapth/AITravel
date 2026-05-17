@@ -208,6 +208,8 @@ export interface RuntimeHealth {
   tavily_key_configured?: boolean;
   tavily_real_time_enabled?: boolean;
   database_ready: boolean;
+  sqlite_database_ready?: boolean;
+  sqlite_database_path?: string;
   missing_database_paths: string[];
 }
 
@@ -223,6 +225,20 @@ export interface ExtractedFields {
 export interface FieldExtractionResponse {
   success: boolean;
   fields?: ExtractedFields;
+  error?: PlanError;
+}
+
+export interface TripIntentReadiness {
+  should_show_checklist: boolean;
+  reason: string;
+  confidence?: number | null;
+  missing_questions: string[];
+  fields: Partial<ConversationGenerateRequest>;
+}
+
+export interface TripIntentReadinessResponse {
+  success: boolean;
+  readiness?: TripIntentReadiness | null;
   error?: PlanError;
 }
 
@@ -390,6 +406,19 @@ export async function saveManualPlanEdit(
     body: JSON.stringify(payload),
   });
   return parseApiResponse<ConversationMessageResponse>(response, "保存手动编辑失败，请稍后重试。");
+}
+
+export async function requestTripIntentReadiness(payload: {
+  latest_message: string;
+  messages: ConversationMessage[];
+  current_fields: Partial<ConversationGenerateRequest>;
+}): Promise<TripIntentReadinessResponse> {
+  const response = await fetch("/api/trip-intent/readiness", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseApiResponse<TripIntentReadinessResponse>(response, "判断旅行需求是否完整失败，请继续补充信息。");
 }
 
 export async function requestFieldExtraction(query: string): Promise<FieldExtractionResponse> {

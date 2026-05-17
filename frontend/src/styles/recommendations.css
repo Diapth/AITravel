@@ -1,0 +1,117 @@
+/* Recommendation cards */
+.recommendation-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-right: 3px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.recommendation-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 180px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 12px;
+}
+
+.recommendation-empty strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.recommendation-empty span {
+  max-width: 240px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.recommendation-card {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+  padding: 13px 13px 13px 18px;
+  text-align: left;
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), border-color var(--duration-fast) ease;
+}
+
+.recommendation-card::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 0;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--jade);
+  transition: background var(--duration-fast) ease;
+}
+
+.recommendation-card.card-theme-nature::before {
+  background: var(--jade);
+}
+
+.recommendation-card.card-theme-city::before {
+  background: var(--blue);
+}
+
+.recommendation-card.card-theme-culture::before {
+  background: var(--amber);
+}
+
+.recommendation-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(11, 118, 95, 0.38);
+  box-shadow: 0 8px 24px rgba(31, 39, 36, 0.1);
+}
+
+.recommendation-card strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: var(--weight-semibold);
+}
+
+.recommendation-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.recommendation-card small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--quiet);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.recommendation-source {
+  justify-self: start;
+  border-radius: 999px;
+  background: var(--jade-soft);
+  color: var(--jade);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+}

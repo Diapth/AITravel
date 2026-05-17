@@ -1,0 +1,592 @@
+/* ============================================
+   Responsive breakpoints
+   ============================================ */
+
+/* ≤1420px — Medium screens */
+@media (max-width: 1420px) {
+  .workspace-grid {
+    grid-template-columns: minmax(300px, 430px) minmax(760px, 1fr);
+  }
+
+  .route-planner-layout {
+    grid-template-columns: minmax(360px, 1fr) minmax(430px, 0.95fr);
+  }
+
+  .route-content-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .route-table-head,
+  .route-table-row {
+    grid-template-columns: 88px 66px minmax(0, 1fr) 56px;
+  }
+
+  .timeline-item {
+    grid-template-columns: 68px minmax(0, 1fr) 196px;
+  }
+
+  .itinerary-main {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .schedule-item {
+    grid-template-columns: 22px 78px minmax(0, 1fr);
+  }
+}
+
+/* ≤1180px — Tablet */
+@media (max-width: 1180px) {
+  html,
+  body,
+  #app {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    transform: none;
+  }
+
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-meta {
+    flex-wrap: wrap;
+  }
+
+  .workspace-grid,
+  .timeline-item,
+  .route-planner-layout,
+  .route-content-grid,
+  .insight-strip,
+  .conversation-workbench.empty-chat,
+  .conversation-workbench.plan-workspace-grid,
+  .workspace-left-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-left-rail {
+    grid-template-rows: auto auto auto;
+  }
+
+  .workspace-grid {
+    height: auto;
+  }
+
+  .conversation-workbench {
+    height: auto;
+  }
+
+  .composer-card {
+    position: static;
+  }
+
+  .timeline-rail {
+    justify-content: flex-start;
+  }
+
+  .timeline-rail::before,
+  .timeline-rail i {
+    display: none;
+  }
+
+  .budget-card {
+    max-width: none;
+  }
+
+  .result-workspace {
+    height: auto;
+    min-height: 520px;
+  }
+
+  .conversation-sidebar,
+  .recommended-plans,
+  .plan-version-timeline,
+  .plan-workspace {
+    min-height: 320px;
+  }
+
+  .travel-chat-panel {
+    min-height: 300px;
+  }
+
+  .result-scroll-area {
+    max-height: 72vh;
+  }
+
+  .result-scroll-area.is-map-mode {
+    overflow-y: auto;
+  }
+
+  .route-table,
+  .route-intel-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .route-planner-layout {
+    grid-template-areas:
+      "map"
+      "detail"
+      "intel";
+    grid-template-rows: auto;
+  }
+
+  .route-intel-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .route-map-panel {
+    min-height: 420px;
+  }
+}
+
+/* ≤760px — Mobile */
+@media (max-width: 760px) {
+  html,
+  body,
+  #app {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Phase 5.1 — Mobile bottom tab bar */
+  .mobile-workbench-tabs {
+    display: none;
+  }
+
+  .mobile-bottom-bar {
+    display: flex;
+    position: fixed;
+    z-index: 30;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    align-items: center;
+    justify-content: space-around;
+    height: 56px;
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(14px);
+    padding: 0 4px env(safe-area-inset-bottom, 0);
+    box-shadow: 0 -2px 12px rgba(31, 39, 36, 0.06);
+  }
+
+  .mobile-bottom-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 56px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--quiet);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: var(--weight-semibold);
+    transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-bottom-tab.active {
+    color: var(--jade);
+  }
+
+  .mobile-bottom-tab:active {
+    background: var(--jade-soft);
+  }
+
+  .app-shell {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    padding: 18px 0 72px;
+  }
+
+  /* Phase 5.2 — Hide bottom bar when keyboard is open */
+  .mobile-bottom-bar.keyboard-open {
+    transform: translateY(100%);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .app-header {
+    gap: 14px;
+  }
+
+  .brand-lockup {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .brand-lockup h1 span,
+  .brand-lockup h1::after {
+    font-size: 24px;
+  }
+
+  .service-strip,
+  .header-meta,
+  .result-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .service-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    padding: 6px;
+  }
+
+  .service-tag {
+    width: 100%;
+    justify-content: flex-start;
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .service-tag b {
+    margin-left: 0;
+  }
+
+  .icon-button,
+  .header-icon-button.el-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .el-dropdown {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .coach-button.el-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .workspace-grid {
+    display: grid;
+    min-width: 0;
+  }
+
+  .conversation-workbench,
+  .workspace-left-rail {
+    display: grid;
+    gap: 12px;
+  }
+
+  .mobile-workbench-tabs {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .conversation-workbench .mobile-panel,
+  .workspace-left-rail .mobile-panel,
+  .plan-workspace-grid > .mobile-panel,
+  .mobile-workspace-left {
+    display: none;
+  }
+
+  .conversation-workbench .mobile-panel.active,
+  .workspace-left-rail .mobile-panel.active,
+  .plan-workspace-grid > .mobile-panel.active,
+  .mobile-workspace-left.active {
+    display: flex;
+  }
+
+  .composer-card,
+  .result-workspace {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  .composer-card + .result-workspace {
+    margin-top: 14px;
+  }
+
+  .prompt-box,
+  .plan-form,
+  .control-stack,
+  .budget-picker,
+  .el-input,
+  .el-textarea,
+  .el-form-item,
+  .el-form-item__content,
+  .el-input__wrapper,
+  .el-textarea__inner {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .el-textarea__inner,
+  .el-input__inner {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .result-topline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summary-strip,
+  .progress-days,
+  .compact-control-grid,
+  .route-summary-strip,
+  .sample-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preference-chip,
+  .sample-button {
+    min-height: 40px;
+    white-space: normal;
+  }
+
+  .composer-card .el-textarea__inner {
+    min-height: 190px !important;
+  }
+
+  .stepper-field,
+  .select-like-field {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .stepper-field span,
+  .select-like-field span {
+    font-size: 16px;
+  }
+
+  .primary-action,
+  .ai-fill-action,
+  .secondary-action,
+  .chat-submit {
+    width: 100%;
+  }
+
+  .chat-composer {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .chat-composer .el-textarea__inner {
+    min-height: 58px !important;
+  }
+
+  .chat-message-list {
+    margin: 10px 0;
+    padding: 10px;
+  }
+
+  .chat-empty-copy {
+    min-height: 300px;
+    padding: 6px 0;
+  }
+
+  .chat-empty-copy .el-empty__image svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .chat-empty-copy .el-empty__description p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .chat-empty-copy .chat-examples .el-button {
+    min-height: 28px;
+    padding: 4px 9px;
+  }
+
+  /* Phase 5.2 — Mobile chat bubbles */
+  .epx-chat-list .elx-bubble-list__list {
+    --elx-bubble-max-width: 85%;
+  }
+
+  .epx-chat-list .elx-bubble--end .elx-bubble__content,
+  .epx-chat-list .elx-bubble--start .elx-bubble__content {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .chat-bubble-content {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+  }
+
+  .checklist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-save-bar,
+  .workspace-toolbar-actions,
+  .workspace-conflict-banner,
+  .editor-day-head,
+  .activity-editor-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editor-actions,
+  .activity-editor-head .compact-editor-action {
+    width: 100%;
+  }
+
+  .editor-field-grid,
+  .activity-editor-row,
+  .activity-type-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-type-fields {
+    grid-column: 1;
+  }
+
+  .chat-submit {
+    min-height: 44px;
+  }
+
+  .chat-message {
+    max-width: 100%;
+  }
+
+  .summary-item + .summary-item {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .route-day-head,
+  .route-table-head,
+  .route-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .route-table-head {
+    display: none;
+  }
+
+  .route-total-card {
+    text-align: left;
+  }
+
+  /* Phase 5.3 — Mobile accordion itinerary */
+  .route-map-panel {
+    min-height: 340px;
+    max-height: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    transition: max-height var(--duration-normal) var(--ease-out), min-height var(--duration-normal) var(--ease-out);
+  }
+
+  .route-map-panel.map-expanded {
+    max-height: 50vh;
+    min-height: 280px;
+  }
+
+  .route-detail-panel {
+    order: -1;
+  }
+
+  .route-summary-strip {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .route-planner-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .route-intel-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .route-table-body .route-table-row {
+    display: none;
+  }
+
+  .route-table-body .route-table-row.active {
+    display: grid;
+  }
+
+  .route-day-detail .route-content-grid > *:not(.route-table) {
+    margin-top: 8px;
+  }
+
+  .map-expand-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--jade-soft);
+    color: var(--jade);
+    cursor: pointer;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: var(--weight-medium);
+  }
+
+  .itinerary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .itinerary-main {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .day-photo {
+    aspect-ratio: 16 / 10;
+    height: auto;
+  }
+
+  .day-copy {
+    padding: 0 4px;
+  }
+
+  .schedule-item {
+    grid-template-columns: 22px 64px minmax(0, 1fr);
+  }
+
+  .warm-tip {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 20px 0 0;
+  }
+}

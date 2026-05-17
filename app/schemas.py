@@ -97,6 +97,34 @@ class FieldExtractionResponse(BaseModel):
     error: ErrorPayload | None = None
 
 
+class TripIntentReadinessRequest(BaseModel):
+    latest_message: str = Field(..., description="用户最新一轮消息")
+    messages: list[dict[str, Any]] = Field(default_factory=list, description="近期会话消息")
+    current_fields: dict[str, Any] = Field(default_factory=dict, description="前端已收集的规划字段")
+
+    @field_validator("latest_message")
+    @classmethod
+    def latest_message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("latest_message must not be blank")
+        return value
+
+
+class TripIntentReadiness(BaseModel):
+    should_show_checklist: bool
+    reason: str = ""
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    missing_questions: list[str] = Field(default_factory=list)
+    fields: dict[str, Any] = Field(default_factory=dict)
+
+
+class TripIntentReadinessResponse(BaseModel):
+    success: bool
+    readiness: TripIntentReadiness | None = None
+    error: ErrorPayload | None = None
+
+
 class ImageSearchItem(BaseModel):
     title: str | None = None
     url: str

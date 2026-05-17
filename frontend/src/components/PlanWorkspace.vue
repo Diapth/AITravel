@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Edit3, Eye } from "lucide-vue-next";
+import { Edit3, Eye, MessageCircle } from "lucide-vue-next";
 import DailyItineraryEditor from "./DailyItineraryEditor.vue";
 import PlannerResults from "./PlannerResults.vue";
 import type { ConversationSummary, PlanResponse, TravelPlan } from "../services/planner";
@@ -10,11 +10,14 @@ const props = defineProps<{
   currentPlan?: TravelPlan | null;
   saveMessage?: string;
   serverWarnings?: string[];
+  conflict?: { currentVersionId: string; baseVersionId: string } | null;
   busy?: boolean;
 }>();
 
 const emit = defineEmits<{
-  saveManualEdit: [plan: TravelPlan, options?: { validation_override?: boolean }];
+  saveManualEdit: [plan: TravelPlan, options?: { validation_override?: boolean; conflict_override?: boolean }];
+  refreshLatest: [];
+  backToChat: [];
 }>();
 
 const mode = ref<"readonly" | "edit">("readonly");
@@ -48,14 +51,27 @@ const payload = computed(() => ({
         <span>行程工作区</span>
         <h2>{{ conversation?.title || "未选择行程" }}</h2>
       </div>
-      <div class="segmented-control" role="tablist" aria-label="工作区模式">
-        <button type="button" :class="{ active: mode === 'readonly' }" @click="mode = 'readonly'">
-          <Eye :size="16" /> 只读
+      <div class="workspace-toolbar-actions">
+        <button class="secondary-action compact-editor-action" type="button" @click="emit('backToChat')">
+          <MessageCircle :size="16" /> 回到聊天
         </button>
-        <button type="button" :class="{ active: mode === 'edit' }" @click="mode = 'edit'">
-          <Edit3 :size="16" /> 编辑
-        </button>
+        <div class="segmented-control" role="tablist" aria-label="工作区模式">
+          <button type="button" :class="{ active: mode === 'readonly' }" @click="mode = 'readonly'">
+            <Eye :size="16" /> 只读
+          </button>
+          <button type="button" :class="{ active: mode === 'edit' }" @click="mode = 'edit'">
+            <Edit3 :size="16" /> 编辑
+          </button>
+        </div>
       </div>
+    </div>
+
+    <div v-if="conflict" class="workspace-conflict-banner" role="alert">
+      <div>
+        <strong>当前版本已变化</strong>
+        <span>可以刷新到最新版本继续编辑，或把当前表单内容强制另存为新版本。</span>
+      </div>
+      <button class="secondary-action compact-editor-action" type="button" :disabled="busy" @click="emit('refreshLatest')">刷新最新</button>
     </div>
 
     <DailyItineraryEditor
@@ -64,6 +80,7 @@ const payload = computed(() => ({
       :busy="busy"
       :message="saveMessage"
       :server-warnings="serverWarnings"
+      :has-conflict="Boolean(conflict)"
       @save="(plan, options) => emit('saveManualEdit', plan, options)"
     />
 

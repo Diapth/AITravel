@@ -322,6 +322,123 @@ def test_conversation_message_keeps_clarifying_when_empty(tmp_path, monkeypatch)
     assert "预算" in data["assistant_message"]["content"]
 
 
+def test_trip_intent_readiness_waits_until_destination_is_precise(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
+    monkeypatch.setattr(
+        "app.main.check_runtime",
+        lambda: {
+            "ok": False,
+            "deepseek_key_configured": False,
+            "database_ready": True,
+            "missing_database_paths": [],
+        },
+    )
+    client = TestClient(app)
+
+    vague = client.post(
+        "/api/trip-intent/readiness",
+        json={
+            "latest_message": "有什么适合放松的地方吗？",
+            "messages": [{"role": "user", "content": "我想找个地方放松"}],
+            "current_fields": {"query": "我想找个地方放松"},
+        },
+    ).json()
+    precise = client.post(
+        "/api/trip-intent/readiness",
+        json={
+            "latest_message": "从上海出发去桂林阳朔 4 天，2 个人，预算 3400",
+            "messages": [{"role": "user", "content": "想看山水"}],
+            "current_fields": {"query": "想看山水"},
+        },
+    ).json()
+
+    assert vague["success"] is True
+    assert vague["readiness"]["should_show_checklist"] is False
+    assert precise["success"] is True
+    assert precise["readiness"]["should_show_checklist"] is True
+    assert precise["readiness"]["fields"]["target_city"] == "上海、桂林、阳朔"
+    assert precise["readiness"]["fields"]["days"] == 4
+
+
+def test_conversation_message_with_existing_plan_creates_ai_edit_version(tmp_path, monkeypatch):
+    from app.travel_memory import TravelMemoryStore
+
+    monkeypatch_db = tmp_path / "memory.sqlite"
+    monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(monkeypatch_db))
+    store = TravelMemoryStore(monkeypatch_db)
+    conversation = store.create_conversation(title="AI 修改测试")
+    base = store.create_plan_version(
+        conversation["id"],
+        {
+            "target_city": "苏州",
+            "days": 2,
+            "itinerary": [{"day": 1, "activities": [{"day": 1, "type": "attraction", "title": "拙政园"}]}],
+            "llm_summary": "苏州两日游",
+        },
+        source="ai_generated",
+    )
+
+    def fake_edit(plan, instruction, messages=None):
+        edited = dict(plan)
+        edited["llm_summary"] = "已改成更轻松"
+        edited["itinerary"] = [
+            {
+                "day": 1,
+                "activities": [
+                    {"day": 1, "type": "attraction", "title": "拙政园", "description": instruction},
+                ],
+            }
+        ]
+        return edited
+
+    monkeypatch.setattr("app.main.edit_plan_with_instruction", fake_edit)
+    client = TestClient(app)
+    response = client.post(
+        f"/api/conversations/{conversation['id']}/messages",
+        json={"message": "帮我改得轻松一点，少走路", "base_version_id": base["id"]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["version"]["source"] == "ai_edit"
+    assert data["version"]["parent_version_id"] == base["id"]
+    assert data["current_plan"]["llm_summary"] == "已改成更轻松"
+    assert "第 2 版" in data["assistant_message"]["content"]
+
+
+def test_conversation_ai_edit_reports_version_conflict(tmp_path):
+    from app.travel_memory import TravelMemoryStore
+
+    monkeypatch_db = tmp_path / "memory.sqlite"
+    store = TravelMemoryStore(monkeypatch_db)
+    import os
+
+    os.environ["CHINATRAVEL_MEMORY_DB_PATH"] = str(monkeypatch_db)
+    conversation = store.create_conversation(title="AI 冲突测试")
+    first = store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "attraction", "title": "拙政园"}]}]},
+        source="ai_generated",
+    )
+    store.create_plan_version(
+        conversation["id"],
+        {"target_city": "苏州", "itinerary": [{"day": 1, "activities": [{"type": "activity", "title": "新版"}]}]},
+        source="manual_edit",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/conversations/{conversation['id']}/messages",
+        json={"message": "帮我加一个夜游", "base_version_id": first["id"]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert data["error"]["code"] == "VERSION_CONFLICT"
+
+
 def test_recommended_plans_return_static_fallback_and_open(tmp_path, monkeypatch):
     monkeypatch.setenv("CHINATRAVEL_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite"))
     client = TestClient(app)
@@ -334,9 +451,11 @@ def test_recommended_plans_return_static_fallback_and_open(tmp_path, monkeypatch
     assert response.json()["success"] is True
     assert recommendations[0]["id"] == "sample-guilin-yangshuo"
     assert recommendations[0]["plan"]["target_city"] == "桂林、阳朔"
+    assert recommendations[0]["plan"]["itinerary"]
     assert open_response.status_code == 200
     opened = open_response.json()
     assert opened["success"] is True
     assert opened["conversation"]["title"] == recommendations[0]["title"]
     assert opened["versions"][0]["source"] == "recommended"
+    assert opened["current_plan"]["itinerary"]
     assert opened["messages"][0]["content"] == "已打开推荐行程，可继续告诉我你想怎么调整。"

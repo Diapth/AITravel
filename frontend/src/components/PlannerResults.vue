@@ -46,6 +46,12 @@ const props = defineProps<{
 const actionMessage = ref("");
 const selectedTab = ref<number | "overview">("overview");
 const activePointId = ref("");
+const mapExpanded = ref(false);
+const mobileExpandedDay = ref<number | null>(null);
+
+function isMobileWidth() {
+  return window.matchMedia("(max-width: 760px)").matches;
+}
 
 const plan = computed<TravelPlan | undefined>(() => {
   if (props.response?.success) return props.response.plan;
@@ -631,7 +637,11 @@ function saveItinerary() {
       </section>
 
       <section v-if="hasResult" class="route-planner-layout" aria-label="地图行程详情">
+        <button class="map-expand-toggle" type="button" @click="mapExpanded = !mapExpanded">
+          {{ mapExpanded ? '收起地图' : '展开地图' }}
+        </button>
         <AmapRoutePanel
+          :class="{ 'map-expanded': mapExpanded }"
           :points="routePoints"
           :selected-day="selectedTab"
           :active-point-id="activePointId"

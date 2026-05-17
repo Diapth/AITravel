@@ -1,0 +1,155 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 56px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(214, 221, 216, 0.88);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(228, 245, 239, 0.35), rgba(234, 242, 255, 0.25)), rgba(255, 255, 255, 0.78);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+  padding: 8px 12px;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(10, 124, 103, 0.18);
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--jade-soft), rgba(234, 242, 255, 0.92));
+  color: var(--jade-dark);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.brand-lockup h1 {
+  font-size: 0;
+}
+
+.brand-lockup h1 span,
+.brand-lockup h1::after {
+  font-size: clamp(24px, 1.7vw, 30px);
+}
+
+.brand-lockup h1 span {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.brand-lockup h1::after {
+  content: " Planner";
+  color: var(--blue);
+}
+
+.brand-lockup p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.header-meta,
+.service-strip,
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.service-strip {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(248, 250, 249, 0.82);
+  padding: 3px 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.service-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.service-tag.el-tag {
+  --el-tag-border-color: transparent;
+  --el-tag-hover-color: currentColor;
+  color: var(--jade-dark);
+}
+
+.service-tag.el-tag--success {
+  background: #dcf3ec;
+  color: #075d4e;
+}
+
+.service-tag.el-tag--warning {
+  background: #fff0dc;
+  color: #87500d;
+}
+
+.service-tag.el-tag--danger {
+  background: #fff0ef;
+  color: #a82420;
+}
+
+.service-tag .el-tag__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.service-tag b {
+  font-size: 12px;
+}
+
+.header-icon-button.el-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  place-items: center;
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.header-icon-button .theme-icon {
+  display: grid;
+  place-items: center;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.header-icon-button:active .theme-icon {
+  transform: rotate(180deg);
+}
+
+.coach-button.el-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 0 12px;
+  font-weight: 800;
+}

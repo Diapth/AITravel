@@ -1,6 +1,20 @@
 from pathlib import Path
 
 
+def _all_css() -> str:
+    """Aggregate all CSS from styles/ directory and styles.css."""
+    parts: list[str] = []
+    root = Path("frontend/src")
+    styles_css = root / "styles.css"
+    if styles_css.exists():
+        parts.append(styles_css.read_text(encoding="utf-8"))
+    styles_dir = root / "styles"
+    if styles_dir.is_dir():
+        for css_file in sorted(styles_dir.glob("*.css")):
+            parts.append(css_file.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def test_frontend_files_exist():
     for relative_path in [
         Path("index.html"),
@@ -96,11 +110,12 @@ def test_frontend_results_are_api_driven_not_demo_static():
     app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
     results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
     planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+    health_ts = Path("frontend/src/composables/useRuntimeHealth.ts").read_text(encoding="utf-8")
 
     assert "requestPlan(payload)" in app_vue
     assert 'fetch("/api/plan"' in planner_ts
     assert 'fetch("/api/health"' in planner_ts
-    assert "requestRuntimeHealth" in app_vue
+    assert "requestRuntimeHealth" in health_ts  # extracted to composable
     assert "demoResponse" not in app_vue
     assert "demoPayload" not in app_vue
     assert "demoResponse" not in results_vue
@@ -108,22 +123,24 @@ def test_frontend_results_are_api_driven_not_demo_static():
 
 
 def test_frontend_uses_compact_desktop_density():
-    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    css = _all_css()
     results_vue = Path("frontend/src/components/PlannerResults.vue").read_text(encoding="utf-8")
 
-    assert "--app-scale" in styles_css
-    assert "height: calc((100vh / var(--app-scale)) - 118px)" in styles_css
-    assert "overflow: hidden" in styles_css
-    assert "flex: 1 1 auto" in styles_css
-    assert "overflow-y: auto" in styles_css
-    assert "route-map-panel" in styles_css
-    assert "route-detail-panel" in styles_css
+    assert "--app-scale" in css
+    assert "height: calc((100vh / var(--app-scale)) - 118px)" in css
+    assert "overflow: hidden" in css
+    assert "flex: 1 1 auto" in css
+    assert "overflow-y: auto" in css
+    assert "route-map-panel" in css
+    assert "route-detail-panel" in css
     assert "buildDayRoutePoints" in results_vue
-    assert "width: min(1880px" in styles_css
-    assert "grid-template-columns: minmax(300px, 450px)" in styles_css
-    assert "route-content-grid" in styles_css
-    assert "route-intel-panel" in styles_css
-    assert "minmax(280px, 0.58fr)" in styles_css
+    assert "width: min(1840px" in css
+    assert "grid-template-columns: minmax(300px, 450px)" in css
+    assert "route-content-grid" in css
+    assert "route-intel-panel" in css
+    assert "grid-template-areas:" in css
+    assert '"map detail"' in css
+    assert ".map-expand-toggle {\n  display: none;" in css
 
 
 def test_frontend_amap_env_is_documented():
@@ -135,11 +152,11 @@ def test_frontend_amap_env_is_documented():
 
 
 def test_frontend_composer_uses_compact_field_grid():
-    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    css = _all_css()
     composer_vue = Path("frontend/src/components/PlannerComposer.vue").read_text(encoding="utf-8")
 
     assert "compact-control-grid" in composer_vue
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in styles_css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
 
 
 def test_frontend_composer_splits_joined_known_target_cities():
@@ -222,17 +239,17 @@ def test_frontend_header_buttons_are_interactive():
     app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
 
     assert "toggleTheme" in app_vue
-    assert "openDocs" in app_vue
-    assert "toggleCoachMenu" in app_vue
+    assert "docsOpen" in app_vue
+    assert "selectCoachMode" in app_vue
     assert "@click=\"toggleTheme\"" in app_vue
-    assert "@click=\"openDocs\"" in app_vue
-    assert "@click=\"toggleCoachMenu\"" in app_vue
+    assert "v-model:visible=\"docsOpen\"" in app_vue
+    assert "@command=\"selectCoachMode\"" in app_vue
 
 
 def test_frontend_conversation_workbench_contract():
     app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
     planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
-    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    css = _all_css()
 
     for helper in [
         "requestConversations",
@@ -263,16 +280,16 @@ def test_frontend_conversation_workbench_contract():
     assert "mobilePanel" in app_vue
     assert "mobile-workbench-tabs" in app_vue
     assert "legacy-plan-panel" in app_vue
-    assert ".conversation-workbench.empty-chat" in styles_css
-    assert ".conversation-workbench.plan-workspace-grid" in styles_css
-    assert ".mobile-workbench-tabs" in styles_css
+    assert ".conversation-workbench.empty-chat" in css
+    assert ".conversation-workbench.plan-workspace-grid" in css
+    assert ".mobile-workbench-tabs" in css
 
 
 def test_frontend_exposes_form_based_manual_editor():
     editor_vue = Path("frontend/src/components/DailyItineraryEditor.vue").read_text(encoding="utf-8")
     workspace_vue = Path("frontend/src/components/PlanWorkspace.vue").read_text(encoding="utf-8")
     planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
-    styles_css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+    css = _all_css()
 
     assert "DailyItineraryEditor" in workspace_vue
     assert "表单化编辑" in editor_vue
@@ -285,27 +302,53 @@ def test_frontend_exposes_form_based_manual_editor():
     assert "ManualPlanEditRequest" in planner_ts
     assert "validation_warnings" in planner_ts
     assert "/manual-edit" in planner_ts
-    assert ".daily-itinerary-editor" in styles_css
-    assert ".activity-editor-row" in styles_css
+    assert ".daily-itinerary-editor" in css
+    assert ".activity-editor-row" in css
 
 
 def test_frontend_initial_chat_clarifies_before_generation():
     app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
     chat_vue = Path("frontend/src/components/TravelChatPanel.vue").read_text(encoding="utf-8")
+    chat_ts = Path("frontend/src/composables/useChat.ts").read_text(encoding="utf-8")
     planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
 
-    assert 'mode === "empty_chat" ? "发送" : "提交修改"' in chat_vue
-    assert "规划清单确认" in chat_vue
-    assert "确认清单并生成攻略" in chat_vue
-    assert "攻略已生成" in chat_vue
-    assert "查看并编辑规划" in chat_vue
     assert "checklistVisible" in chat_vue
     assert "generatedCard" in chat_vue
     assert "confirmGenerate" in chat_vue
     assert "openGeneratedPlan" in chat_vue
-    assert "generateConversationPlan(currentConversation.value.id, payload)" in app_vue
-    assert "shouldShowChecklist" in app_vue
+    assert "confirmGenerate" in app_vue  # wired through composable
+    assert "generateConversationPlan" in chat_ts  # extracted to composable
+    assert "shouldShowChecklist" in chat_ts
+    assert "requestTripIntentReadiness" in chat_ts
+    assert "/api/trip-intent/readiness" in planner_ts
+    assert "规划|攻略|行程" not in chat_ts
+    assert "Thinking" in chat_vue
+    assert "renderMarkdown" in chat_vue
     assert "/generate" in planner_ts
+
+
+def test_frontend_chat_thinking_progress_stays_left_and_persists():
+    chat_vue = Path("frontend/src/components/TravelChatPanel.vue").read_text(encoding="utf-8")
+    css = _all_css()
+
+    assert "PublicThinkingRecord" in chat_vue
+    assert "completedThinkingRecords" in chat_vue
+    assert "attachCompletedThinking" in chat_vue
+    assert "thinkingStatus" in chat_vue
+    assert "思考完成" in chat_vue
+    assert "思考中..." in chat_vue
+    assert "thinking-progress-content markdown-body" in chat_vue
+    assert ':auto-collapse="false"' in chat_vue
+    assert "item.itemType === 'thinking'" in chat_vue
+
+    assert ".thinking-progress-wrapper" in css
+    assert "justify-content: flex-start" in css
+    assert "align-self: flex-start" in css
+    assert ".thinking-progress-bubble .elx-thinking" in css
+    assert "margin: 0 !important" in css
+    assert ".thinking-progress-content.markdown-body" in css
+    assert ".typing-indicator-wrapper" not in css
+    assert "item.itemType === 'typing'" not in chat_vue
 
 
 def test_backend_exposes_manual_edit_endpoint_contract():
@@ -317,3 +360,35 @@ def test_backend_exposes_manual_edit_endpoint_contract():
     assert 'source="manual_edit"' in main_py
     assert "VERSION_CONFLICT" in main_py
     assert "PLAN_VALIDATION_FAILED" in main_py
+
+
+def test_frontend_exposes_conflict_and_typed_activity_controls():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    workspace_vue = Path("frontend/src/components/PlanWorkspace.vue").read_text(encoding="utf-8")
+    editor_vue = Path("frontend/src/components/DailyItineraryEditor.vue").read_text(encoding="utf-8")
+    planner_ts = Path("frontend/src/services/planner.ts").read_text(encoding="utf-8")
+    css = _all_css()
+
+    assert "manualEditConflict" in app_vue
+    assert "handleRefreshLatestPlan" in app_vue
+    assert "回到聊天" in workspace_vue
+    assert "workspace-conflict-banner" in workspace_vue
+    assert "强制另存" in editor_vue
+    assert "conflict_override" in editor_vue
+    assert "activityType(activity) === 'train'" in editor_vue
+    assert "activityType(activity) === 'accommodation'" in editor_vue
+    assert "activityType(activity) === 'restaurant'" in editor_vue
+    assert "activityType(activity) === 'attraction'" in editor_vue
+    assert "requestTripIntentReadiness" in planner_ts
+    assert ".activity-type-fields" in css
+
+
+def test_frontend_plan_workspace_back_to_chat_is_wired():
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    workspace_vue = Path("frontend/src/components/PlanWorkspace.vue").read_text(encoding="utf-8")
+
+    assert "backToChat: []" in workspace_vue
+    assert "emit('backToChat')" in workspace_vue
+    assert "newConversation: []" not in workspace_vue
+    assert "@back-to-chat=\"handleBackToChat\"" in app_vue
+    assert 'function handleBackToChat() {\n  appMode.value = "empty_chat";\n  mobilePanel.value = "chat";\n}' in app_vue

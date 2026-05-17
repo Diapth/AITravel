@@ -45,6 +45,23 @@ def test_check_runtime_accepts_deepseek_key_and_database(tmp_path, monkeypatch):
     assert status["missing_database_paths"] == []
 
 
+def test_check_runtime_accepts_sqlite_database_without_legacy_csv_dirs(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    database_root = tmp_path / "chinatravel" / "environment" / "database"
+    database_root.mkdir(parents=True)
+    (database_root / "chinatravel.sqlite").write_bytes(b"sqlite placeholder")
+
+    status = check_runtime(project_root=tmp_path)
+
+    assert status["ok"] is True
+    assert status["database_ready"] is True
+    assert status["sqlite_database_ready"] is True
+    assert status["missing_database_paths"] == [
+        str(Path("chinatravel/environment/database") / path)
+        for path in REQUIRED_DATABASE_PATHS
+    ]
+
+
 def test_deepseek_key_can_be_loaded_from_dotenv_file(tmp_path, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

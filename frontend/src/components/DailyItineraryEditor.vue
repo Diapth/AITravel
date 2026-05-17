@@ -8,13 +8,15 @@ const props = defineProps<{
   busy?: boolean;
   message?: string;
   serverWarnings?: string[];
+  hasConflict?: boolean;
 }>();
 
 const emit = defineEmits<{
-  save: [plan: TravelPlan, options?: { validation_override?: boolean }];
+  save: [plan: TravelPlan, options?: { validation_override?: boolean; conflict_override?: boolean }];
 }>();
 
 type EditableDay = PlanDay & { activities: PlanActivity[] };
+type ActivityType = "attraction" | "restaurant" | "accommodation" | "train" | "activity";
 
 const draft = ref<TravelPlan>({});
 const localWarning = ref("");
@@ -119,6 +121,32 @@ function patchActivity(dayIndex: number, activityIndex: number, field: keyof Pla
   syncDays(days);
 }
 
+function activityType(activity: PlanActivity): ActivityType {
+  const type = activity.type as ActivityType | undefined;
+  return type && ["attraction", "restaurant", "accommodation", "train", "activity"].includes(type) ? type : "activity";
+}
+
+function patchActivityType(dayIndex: number, activityIndex: number, value: string) {
+  const nextType = value as ActivityType;
+  const defaults: Partial<PlanActivity> =
+    nextType === "train"
+      ? { transportation: "高铁/交通参考", start: "", end: "", seat_label: "", ticket_left: "" }
+      : nextType === "accommodation"
+        ? { rooms: 1, price_source: "estimate", position: "" }
+        : nextType === "restaurant"
+          ? { recommended_food: "", position: "" }
+          : nextType === "attraction"
+            ? { position: "", recommended_food: "" }
+            : {};
+  const days = editableDays.value.map((day) => ({ ...day, activities: day.activities.map((activity) => ({ ...activity })) }));
+  days[dayIndex].activities[activityIndex] = {
+    ...days[dayIndex].activities[activityIndex],
+    ...defaults,
+    type: nextType,
+  };
+  syncDays(days);
+}
+
 function addDay() {
   const days = editableDays.value.map((day) => ({ ...day, activities: [...day.activities] }));
   const nextDay = days.length + 1;
@@ -170,13 +198,13 @@ function textValue(event: Event) {
   return (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
 }
 
-function save(force = false) {
+function save(force = false, conflictOverride = false) {
   if (validationWarnings.value.length && !force) {
     localWarning.value = "表单内容还不完整，请根据提示补齐；也可以选择仍然保存为带风险标记的新版本。";
     return;
   }
   localWarning.value = "";
-  emit("save", clonePlan(draft.value), { validation_override: force });
+  emit("save", clonePlan(draft.value), { validation_override: force, conflict_override: conflictOverride });
 }
 </script>
 
@@ -193,6 +221,9 @@ function save(force = false) {
         </button>
         <button class="primary-action compact-editor-action" type="button" :disabled="busy" @click="save(false)">
           <Save :size="16" /> 保存新版
+        </button>
+        <button v-if="hasConflict" class="secondary-action compact-editor-action" type="button" :disabled="busy" @click="save(true, true)">
+          <Save :size="16" /> 强制另存
         </button>
       </div>
     </div>
@@ -277,7 +308,7 @@ function save(force = false) {
           </div>
 
           <article v-for="(activity, activityIndex) in day.activities" :key="activityIndex" class="activity-editor-row">
-            <select :value="activity.type || 'activity'" @change="patchActivity(dayIndex, activityIndex, 'type', textValue($event))">
+            <select :value="activity.type || 'activity'" @change="patchActivityType(dayIndex, activityIndex, textValue($event))">
               <option value="attraction">景点</option>
               <option value="restaurant">餐饮</option>
               <option value="accommodation">住宿</option>
@@ -298,6 +329,28 @@ function save(force = false) {
               placeholder="说明 / 推荐菜 / 注意事项"
               @input="patchActivity(dayIndex, activityIndex, 'description', textValue($event))"
             />
+            <div v-if="activityType(activity) === 'train'" class="activity-type-fields">
+              <input :value="activity.start || ''" placeholder="出发站/地点" @input="patchActivity(dayIndex, activityIndex, 'start', textValue($event))" />
+              <input :value="activity.end || ''" placeholder="到达站/地点" @input="patchActivity(dayIndex, activityIndex, 'end', textValue($event))" />
+              <input :value="activity.transportation || ''" placeholder="交通方式" @input="patchActivity(dayIndex, activityIndex, 'transportation', textValue($event))" />
+              <input :value="activity.seat_label || ''" placeholder="席别/座位" @input="patchActivity(dayIndex, activityIndex, 'seat_label', textValue($event))" />
+            </div>
+            <div v-else-if="activityType(activity) === 'accommodation'" class="activity-type-fields">
+              <input :value="activity.position || ''" placeholder="酒店/住宿位置" @input="patchActivity(dayIndex, activityIndex, 'position', textValue($event))" />
+              <input :value="activity.rooms || ''" type="number" min="1" placeholder="房间数" @input="patchActivity(dayIndex, activityIndex, 'rooms', numericValue($event))" />
+              <input :value="activity.price || ''" type="number" min="0" placeholder="单晚/参考价" @input="patchActivity(dayIndex, activityIndex, 'price', numericValue($event))" />
+              <input :value="activity.price_source || ''" placeholder="价格来源" @input="patchActivity(dayIndex, activityIndex, 'price_source', textValue($event))" />
+            </div>
+            <div v-else-if="activityType(activity) === 'restaurant'" class="activity-type-fields">
+              <input :value="activity.position || ''" placeholder="餐厅/商圈" @input="patchActivity(dayIndex, activityIndex, 'position', textValue($event))" />
+              <input :value="activity.recommended_food || ''" placeholder="推荐菜" @input="patchActivity(dayIndex, activityIndex, 'recommended_food', textValue($event))" />
+              <input :value="activity.price_source || ''" placeholder="价格来源" @input="patchActivity(dayIndex, activityIndex, 'price_source', textValue($event))" />
+            </div>
+            <div v-else-if="activityType(activity) === 'attraction'" class="activity-type-fields">
+              <input :value="activity.position || ''" placeholder="景点位置" @input="patchActivity(dayIndex, activityIndex, 'position', textValue($event))" />
+              <input :value="activity.ticket_left || ''" placeholder="预约/余票提示" @input="patchActivity(dayIndex, activityIndex, 'ticket_left', textValue($event))" />
+              <input :value="activity.recommended_food || ''" placeholder="附近推荐" @input="patchActivity(dayIndex, activityIndex, 'recommended_food', textValue($event))" />
+            </div>
             <div class="activity-row-actions">
               <button class="mini-icon-button" type="button" :disabled="busy" aria-label="复制活动" @click="duplicateActivity(dayIndex, activityIndex)">
                 <CopyPlus :size="15" />

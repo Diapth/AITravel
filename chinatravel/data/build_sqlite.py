@@ -20,8 +20,21 @@ def _write_csv_table(connection: sqlite3.Connection, table: str, category: str, 
         frame.insert(0, "city", path.parent.name)
         frames.append(frame)
     if not frames:
-        raise FileNotFoundError(f"No source files found for {category}/{pattern}")
+        _write_empty_table(connection, table)
+        return
     pd.concat(frames, ignore_index=True).to_sql(table, connection, if_exists="replace", index=False)
+
+
+def _write_empty_table(connection: sqlite3.Connection, table: str) -> None:
+    source = DEFAULT_OUTPUT
+    if source.exists():
+        with sqlite3.connect(source) as source_connection:
+            columns = source_connection.execute(f"PRAGMA table_info({table})").fetchall()
+        if columns:
+            column_defs = ", ".join(f"{row[1]} {row[2] or 'TEXT'}" for row in columns)
+            connection.execute(f"CREATE TABLE {table} ({column_defs})")
+            return
+    connection.execute(f"CREATE TABLE {table} (city TEXT)")
 
 
 def _write_poi(connection: sqlite3.Connection) -> None:

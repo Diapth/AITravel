@@ -30,7 +30,55 @@ STATIC_RECOMMENDED_PLANS: tuple[dict[str, Any], ...] = (
             "budget": 3400,
             "total_cost": 3200,
             "llm_summary": "桂林阳朔四天三晚，兼顾山水、骑行和美食。",
-            "itinerary": [],
+            "itinerary": [
+                {
+                    "day": 1,
+                    "title": "抵达桂林与两江四湖",
+                    "summary": "轻松抵达后入住市区，傍晚散步到两江四湖。",
+                    "location": "桂林",
+                    "accommodation": "桂林中心广场附近",
+                    "activities": [
+                        {"day": 1, "type": "train", "title": "抵达桂林", "start": "上海", "end": "桂林", "start_time": "08:30", "end_time": "15:30", "transportation": "高铁参考", "cost": 620},
+                        {"day": 1, "type": "accommodation", "title": "桂林中心酒店", "position": "中心广场商圈", "start_time": "16:00", "end_time": "17:00", "rooms": 1, "cost": 360},
+                        {"day": 1, "type": "attraction", "title": "两江四湖", "position": "两江四湖景区", "start_time": "19:00", "end_time": "21:00", "description": "夜景散步或游船，节奏轻松。", "cost": 180},
+                    ],
+                },
+                {
+                    "day": 2,
+                    "title": "漓江精华与阳朔西街",
+                    "summary": "上午看漓江山水，下午转到阳朔，晚间逛西街。",
+                    "location": "阳朔",
+                    "accommodation": "阳朔西街附近",
+                    "activities": [
+                        {"day": 2, "type": "attraction", "title": "漓江竹筏", "position": "杨堤-兴坪段", "start_time": "09:00", "end_time": "12:00", "description": "选择精华段，减少车程折返。", "cost": 320},
+                        {"day": 2, "type": "restaurant", "title": "阳朔啤酒鱼", "position": "西街附近餐厅", "start_time": "12:30", "end_time": "13:30", "recommended_food": "啤酒鱼、田螺酿", "cost": 180},
+                        {"day": 2, "type": "activity", "title": "阳朔西街", "position": "阳朔西街", "start_time": "19:00", "end_time": "21:00", "description": "夜间散步和小吃。", "cost": 80},
+                    ],
+                },
+                {
+                    "day": 3,
+                    "title": "遇龙河与十里画廊",
+                    "summary": "上午竹筏，下午骑行十里画廊，保留午休。",
+                    "location": "阳朔",
+                    "accommodation": "阳朔西街附近",
+                    "activities": [
+                        {"day": 3, "type": "attraction", "title": "遇龙河竹筏", "position": "遇龙河景区", "start_time": "09:30", "end_time": "11:30", "description": "建议提前预约热门码头。", "cost": 260},
+                        {"day": 3, "type": "restaurant", "title": "桂林米粉", "position": "阳朔县城", "start_time": "12:00", "end_time": "13:00", "recommended_food": "卤菜粉、油茶", "cost": 60},
+                        {"day": 3, "type": "attraction", "title": "十里画廊骑行", "position": "十里画廊", "start_time": "15:00", "end_time": "17:30", "description": "按体力选择电动车或轻骑行。", "cost": 120},
+                    ],
+                },
+                {
+                    "day": 4,
+                    "title": "返程前慢逛",
+                    "summary": "上午补一个轻量景点或咖啡店，下午返程。",
+                    "location": "桂林",
+                    "activities": [
+                        {"day": 4, "type": "attraction", "title": "象鼻山", "position": "象鼻山景区", "start_time": "09:30", "end_time": "11:00", "description": "经典地标，适合返程前短停留。", "cost": 110},
+                        {"day": 4, "type": "restaurant", "title": "本地简餐", "position": "桂林站附近", "start_time": "11:30", "end_time": "12:30", "recommended_food": "桂林米粉", "cost": 70},
+                        {"day": 4, "type": "train", "title": "桂林返程", "start": "桂林", "end": "上海", "start_time": "14:00", "end_time": "21:00", "transportation": "高铁参考", "cost": 620},
+                    ],
+                },
+            ],
         },
     },
     {
@@ -47,7 +95,43 @@ STATIC_RECOMMENDED_PLANS: tuple[dict[str, Any], ...] = (
             "budget": 2800,
             "total_cost": 2500,
             "llm_summary": "成都三天两晚美食体验路线。",
-            "itinerary": [],
+            "itinerary": [
+                {
+                    "day": 1,
+                    "title": "抵达成都与宽窄巷子",
+                    "summary": "入住市中心，晚间轻松吃川菜。",
+                    "location": "成都",
+                    "accommodation": "春熙路附近",
+                    "activities": [
+                        {"day": 1, "type": "train", "title": "抵达成都", "start": "上海", "end": "成都", "start_time": "09:00", "end_time": "16:30", "transportation": "高铁/航班参考", "cost": 760},
+                        {"day": 1, "type": "accommodation", "title": "春熙路酒店", "position": "春熙路商圈", "start_time": "17:00", "end_time": "18:00", "rooms": 1, "cost": 420},
+                        {"day": 1, "type": "restaurant", "title": "宽窄巷子川菜", "position": "宽窄巷子", "start_time": "19:00", "end_time": "20:30", "recommended_food": "钵钵鸡、担担面", "cost": 180},
+                    ],
+                },
+                {
+                    "day": 2,
+                    "title": "茶馆与街区漫游",
+                    "summary": "上午人民公园，下午太古里和玉林路。",
+                    "location": "成都",
+                    "accommodation": "春熙路附近",
+                    "activities": [
+                        {"day": 2, "type": "attraction", "title": "人民公园茶馆", "position": "人民公园", "start_time": "10:00", "end_time": "12:00", "description": "喝盖碗茶，体验本地生活。", "cost": 80},
+                        {"day": 2, "type": "restaurant", "title": "火锅晚餐", "position": "玉林路", "start_time": "18:00", "end_time": "20:00", "recommended_food": "鸳鸯锅、酥肉", "cost": 260},
+                        {"day": 2, "type": "activity", "title": "玉林路散步", "position": "玉林路", "start_time": "20:00", "end_time": "21:30", "description": "饭后慢走，备选小酒馆。", "cost": 80},
+                    ],
+                },
+                {
+                    "day": 3,
+                    "title": "文殊院与返程",
+                    "summary": "上午文殊院周边小吃，下午返程。",
+                    "location": "成都",
+                    "activities": [
+                        {"day": 3, "type": "attraction", "title": "文殊院", "position": "文殊院", "start_time": "09:30", "end_time": "11:00", "description": "安静街区，适合慢逛。", "cost": 0},
+                        {"day": 3, "type": "restaurant", "title": "文殊院小吃", "position": "文殊院周边", "start_time": "11:30", "end_time": "12:30", "recommended_food": "甜水面、钟水饺", "cost": 90},
+                        {"day": 3, "type": "train", "title": "成都返程", "start": "成都", "end": "上海", "start_time": "14:30", "end_time": "22:00", "transportation": "高铁/航班参考", "cost": 760},
+                    ],
+                },
+            ],
         },
     },
     {
@@ -64,7 +148,32 @@ STATIC_RECOMMENDED_PLANS: tuple[dict[str, Any], ...] = (
             "budget": 1300,
             "total_cost": 1100,
             "llm_summary": "苏州周末两天一晚轻松路线。",
-            "itinerary": [],
+            "itinerary": [
+                {
+                    "day": 1,
+                    "title": "园林与平江路",
+                    "summary": "上午从上海出发，白天园林，夜晚平江路。",
+                    "location": "苏州",
+                    "accommodation": "观前街附近",
+                    "activities": [
+                        {"day": 1, "type": "train", "title": "上海到苏州", "start": "上海", "end": "苏州", "start_time": "08:30", "end_time": "09:10", "transportation": "高铁参考", "cost": 80},
+                        {"day": 1, "type": "attraction", "title": "拙政园", "position": "拙政园", "start_time": "10:00", "end_time": "12:00", "description": "提前预约，避开正午高峰。", "cost": 160},
+                        {"day": 1, "type": "restaurant", "title": "苏帮菜午餐", "position": "观前街", "start_time": "12:30", "end_time": "13:30", "recommended_food": "松鼠桂鱼、响油鳝糊", "cost": 180},
+                        {"day": 1, "type": "activity", "title": "平江路夜游", "position": "平江路", "start_time": "19:00", "end_time": "21:00", "description": "评弹、茶馆和夜景。", "cost": 100},
+                    ],
+                },
+                {
+                    "day": 2,
+                    "title": "博物馆与返程",
+                    "summary": "上午苏博或留园，下午返沪。",
+                    "location": "苏州",
+                    "activities": [
+                        {"day": 2, "type": "attraction", "title": "苏州博物馆", "position": "苏州博物馆", "start_time": "09:30", "end_time": "11:30", "description": "需提前预约，和拙政园距离近。", "cost": 0},
+                        {"day": 2, "type": "restaurant", "title": "面馆午餐", "position": "十全街", "start_time": "12:00", "end_time": "13:00", "recommended_food": "焖肉面、三虾面", "cost": 80},
+                        {"day": 2, "type": "train", "title": "苏州到上海", "start": "苏州", "end": "上海", "start_time": "16:00", "end_time": "16:40", "transportation": "高铁参考", "cost": 80},
+                    ],
+                },
+            ],
         },
     },
 )
@@ -117,6 +226,21 @@ def _plan_card_summary(plan: dict[str, Any]) -> str:
     target = plan.get("target_city") or "目的地"
     days = plan.get("days") or "多"
     return f"{target}{days}天行程，可继续聊天修改。"
+
+
+def _plan_has_visible_itinerary(plan: dict[str, Any]) -> bool:
+    itinerary = plan.get("itinerary")
+    if not isinstance(itinerary, list) or not itinerary:
+        return False
+    for item in itinerary:
+        if not isinstance(item, dict):
+            continue
+        activities = item.get("activities")
+        if isinstance(activities, list) and activities:
+            return True
+        if item.get("title") or item.get("position") or item.get("description"):
+            return True
+    return False
 
 
 def _bucket_budget(value: int | None) -> str:
@@ -596,6 +720,8 @@ class TravelMemoryStore:
             ).fetchall()
             for version_id, conversation_id, summary, plan_json, source, _created_at, title in version_rows:
                 plan = json.loads(plan_json)
+                if not _plan_has_visible_itinerary(plan):
+                    continue
                 recommendations.append(
                     {
                         "id": f"version-{version_id}",
@@ -619,6 +745,8 @@ class TravelMemoryStore:
                 ).fetchall()
                 for plan_id, summary, plan_json, source_agent in trip_rows:
                     plan = json.loads(plan_json)
+                    if not _plan_has_visible_itinerary(plan):
+                        continue
                     recommendations.append(
                         {
                             "id": f"trip-{plan_id}",

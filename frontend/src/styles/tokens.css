@@ -1,0 +1,71 @@
+:root {
+  color-scheme: light;
+  --ink: #171b1a;
+  --muted: #69716f;
+  --quiet: #8a928f;
+  --paper: #f5f7f6;
+  --panel: #ffffff;
+  --panel-soft: #f8faf9;
+  --line: #e5e8e5;
+  --line-strong: #d6ddd8;
+  --jade: #0a7c67;
+  --jade-dark: #075d4e;
+  --jade-soft: #e4f5ef;
+  --cinnabar: #bd2f2b;
+  --amber: #e67f34;
+  --blue: #2563eb;
+  --sky-soft: #eaf2ff;
+  --shadow: 0 18px 50px rgba(30, 42, 38, 0.08);
+  --shadow-soft: 0 10px 26px rgba(30, 42, 38, 0.06);
+  --radius: 8px;
+  --app-scale: 0.9;
+
+  /* Spacing tokens */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Typography tokens */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  /* Font weight tokens */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Transition tokens */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+
+  /* Border radius gradient */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #eaf3ef;
+  --muted: #b7c5bf;
+  --quiet: #9fb5ac;
+  --paper: #101716;
+  --panel: #17211f;
+  --panel-soft: #1d2926;
+  --line: #2b3b37;
+  --line-strong: #3f5550;
+  --jade: #4cc0a5;
+  --jade-dark: #8ddacb;
+  --jade-soft: #193d35;
+  --sky-soft: #172946;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+  --shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.22);
+}

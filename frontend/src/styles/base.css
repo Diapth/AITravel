@@ -1,0 +1,118 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  min-width: 320px;
+  overflow: hidden;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(90deg, rgba(10, 124, 103, 0.035) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(37, 99, 235, 0.028) 1px, transparent 1px),
+    radial-gradient(circle at 78% 0%, rgba(37, 99, 235, 0.08), transparent 30%),
+    radial-gradient(circle at 10% 12%, rgba(10, 124, 103, 0.08), transparent 24%),
+    var(--paper);
+  background-size: auto, 48px 48px, 48px 48px, auto, auto, auto;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] body {
+  background:
+    linear-gradient(180deg, rgba(23, 33, 31, 0.92), rgba(16, 23, 22, 0) 38%),
+    linear-gradient(90deg, rgba(76, 192, 165, 0.05) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 82% 0%, rgba(37, 99, 235, 0.12), transparent 31%),
+    radial-gradient(circle at 7% 10%, rgba(76, 192, 165, 0.1), transparent 25%),
+    var(--paper);
+  background-size: auto, 48px 48px, 48px 48px, auto, auto, auto;
+}
+
+#app {
+  height: 100%;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+p {
+  letter-spacing: 0;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+h2 {
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.app-shell {
+  width: min(1840px, calc(100% - 24px));
+  max-width: 100%;
+  height: 100%;
+  margin: 0 auto;
+  padding: 16px 0 22px;
+  transform: scale(var(--app-scale));
+  transform-origin: top center;
+}
+
+/* Shared component chrome */
+.conversation-sidebar,
+.travel-chat-panel,
+.recommended-plans,
+.plan-version-timeline,
+.plan-workspace {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(14px);
+}
+
+.conversation-sidebar,
+.recommended-plans,
+.plan-version-timeline {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.travel-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.plan-workspace {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px;
+}

@@ -6,7 +6,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.amap_demo import AmapDemoClient, AmapDemoError, amap_demo_error, amap_demo_response
-from app.assistants import chat_about_trip_intent, extract_fields_from_query, search_images
+from app.assistants import (
+    assess_trip_intent_readiness,
+    chat_about_trip_intent,
+    edit_plan_with_instruction,
+    extract_fields_from_query,
+    search_images,
+)
 from app.planner import get_planner
 from app.runtime_checks import check_runtime
 from app.schemas import (
@@ -17,6 +23,8 @@ from app.schemas import (
     ConversationManualEditRequest,
     ConversationMessageRequest,
     ConversationMessageResponse,
+    TripIntentReadinessRequest,
+    TripIntentReadinessResponse,
     ErrorPayload,
     FieldExtractionRequest,
     FieldExtractionResponse,
@@ -75,6 +83,18 @@ def _request_id_from_meta(meta: dict | None) -> str | None:
     memory_write = meta.get("memory_write")
     if isinstance(memory_write, dict) and memory_write.get("request_id"):
         return str(memory_write["request_id"])
+    return None
+
+
+def _current_version_number(detail: dict | None, version_id: str | None) -> int | None:
+    if not detail or not version_id:
+        return None
+    for version in detail.get("versions") or []:
+        if version.get("id") == version_id:
+            try:
+                return int(version.get("version_number"))
+            except (TypeError, ValueError):
+                return None
     return None
 
 
@@ -193,6 +213,66 @@ def _generate_first_version(
         assistant_message=assistant_message,
         version=version,
         current_plan=detail["current_plan"],
+    )
+
+
+def _generate_ai_edit_version(
+    store: TravelMemoryStore,
+    conversation_id: str,
+    detail: dict,
+    request: ConversationMessageRequest,
+    *,
+    user_message_row: dict,
+) -> ConversationMessageResponse:
+    conversation = detail["conversation"]
+    current_version_id = conversation.get("current_version_id")
+    if request.base_version_id and request.base_version_id != current_version_id and not request.conflict_override:
+        updated = store.get_conversation(conversation_id)
+        return ConversationMessageResponse(
+            success=False,
+            conversation=updated["conversation"] if updated else conversation,
+            message=user_message_row,
+            current_plan=updated["current_plan"] if updated else detail.get("current_plan"),
+            error=ErrorPayload(
+                code="VERSION_CONFLICT",
+                message="当前行程版本已变化，请刷新到最新版本后再修改，或选择仍基于当前内容另存新版本。",
+                details={"current_version_id": current_version_id, "base_version_id": request.base_version_id},
+            ),
+        )
+    current_plan = detail.get("current_plan")
+    if not isinstance(current_plan, dict):
+        return ConversationMessageResponse(
+            success=False,
+            conversation=conversation,
+            message=user_message_row,
+            error=ErrorPayload(code="PLAN_NOT_READY", message="当前会话还没有可修改的行程。"),
+        )
+
+    edited_plan = edit_plan_with_instruction(current_plan, request.message, _conversation_chat_context(detail))
+    warnings = _validate_manual_plan(edited_plan)
+    if warnings:
+        edited_plan["validation_warnings"] = warnings
+    version = store.create_plan_version(
+        conversation_id,
+        edited_plan,
+        source="ai_edit",
+        parent_version_id=current_version_id,
+        summary=_plan_summary(edited_plan),
+    )
+    assistant_message = store.append_message(
+        conversation_id,
+        "assistant",
+        f"已按你的要求生成第 {version['version_number']} 版 AI 修改行程。",
+        plan_version_id=version["id"],
+    )
+    updated = store.get_conversation(conversation_id)
+    return ConversationMessageResponse(
+        success=True,
+        conversation=updated["conversation"] if updated else conversation,
+        message=user_message_row,
+        assistant_message=assistant_message,
+        version=version,
+        current_plan=updated["current_plan"] if updated else edited_plan,
     )
 
 
@@ -325,13 +405,7 @@ def append_conversation_message(conversation_id: str, request: ConversationMessa
         )
     user_message = store.append_message(conversation_id, "user", request.message)
     if detail["conversation"]["current_version_id"]:
-        updated = store.get_conversation(conversation_id)
-        return ConversationMessageResponse(
-            success=False,
-            conversation=updated["conversation"] if updated else None,
-            message=user_message,
-            error=ErrorPayload(code="AI_EDIT_NOT_IMPLEMENTED", message="已有行程的继续修改将在后续版本开放。"),
-        )
+        return _generate_ai_edit_version(store, conversation_id, detail, request, user_message_row=user_message)
     assistant_content = chat_about_trip_intent(_conversation_chat_context(detail), request.message)
     assistant_message = store.append_message(
         conversation_id,
@@ -346,6 +420,36 @@ def append_conversation_message(conversation_id: str, request: ConversationMessa
         assistant_message=assistant_message,
         current_plan=None,
     )
+
+
+@app.post(
+    "/api/trip-intent/readiness",
+    response_model=TripIntentReadinessResponse,
+    response_model_exclude_none=True,
+)
+def trip_intent_readiness(request: TripIntentReadinessRequest) -> TripIntentReadinessResponse:
+    runtime_status = check_runtime()
+    try:
+        if not runtime_status.get("deepseek_key_configured"):
+            from app.assistants import heuristic_trip_intent_readiness
+
+            readiness = heuristic_trip_intent_readiness(
+                request.messages,
+                request.latest_message,
+                request.current_fields,
+            )
+        else:
+            readiness = assess_trip_intent_readiness(
+                request.messages,
+                request.latest_message,
+                request.current_fields,
+            )
+        return TripIntentReadinessResponse(success=True, readiness=readiness)
+    except Exception as exc:
+        return TripIntentReadinessResponse(
+            success=False,
+            error=ErrorPayload(code="READINESS_FAILED", message=str(exc)),
+        )
 
 
 @app.post(

@@ -1,0 +1,77 @@
+:root {
+  --el-color-primary: #0a7c67;
+  --el-color-primary-light-3: #46a08e;
+  --el-color-primary-light-5: #79baad;
+  --el-color-primary-light-7: #b5dcd3;
+  --el-color-primary-light-8: #d2ebe5;
+  --el-color-primary-light-9: #e8f6f2;
+  --el-color-primary-dark-2: #075d4e;
+  --el-border-radius-base: 8px;
+  --el-border-radius-round: 999px;
+  --el-font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: var(--muted);
+  --el-border-color: var(--line);
+  --el-fill-color-light: var(--panel-soft);
+  --el-bg-color: var(--panel);
+  --el-bg-color-page: var(--paper);
+}
+
+:root[data-theme="dark"] {
+  --el-color-primary: #4cc0a5;
+  --el-color-primary-light-3: #61c8b1;
+  --el-color-primary-light-5: #2f8372;
+  --el-color-primary-light-7: #245f55;
+  --el-color-primary-light-8: #1d4d45;
+  --el-color-primary-light-9: #17352f;
+  --el-color-primary-dark-2: #8ddacb;
+  --el-border-color: var(--line);
+  --el-fill-color-light: var(--panel-soft);
+  --el-bg-color: var(--panel);
+  --el-bg-color-page: var(--paper);
+}
+
+.el-form-item__label::before {
+  color: var(--cinnabar) !important;
+}
+
+.el-form-item {
+  margin-bottom: 0;
+}
+
+.el-form-item__label {
+  color: #242b29;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.el-textarea__inner,
+.el-input__wrapper {
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
+}
+
+.el-textarea__inner {
+  min-height: 150px !important;
+  padding: 14px 16px 42px;
+  color: #27302d;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.62;
+}
+
+.el-input__wrapper {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.el-input__inner {
+  color: #242b29;
+  font-weight: 800;
+}
+
+.el-textarea__inner:focus,
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px rgba(11, 118, 95, 0.75) inset, 0 0 0 4px rgba(11, 118, 95, 0.12);
+}

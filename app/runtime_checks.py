@@ -40,8 +40,9 @@ def check_runtime(project_root: Path | None = None) -> dict[str, Any]:
     deepseek_key_configured = bool(get_deepseek_api_key())
     tavily_key_configured = bool(get_tavily_api_key())
     tavily_real_time_enabled = get_bool_env("TAVILY_REAL_TIME_ENABLED", False)
-    database_ready = not missing_database_paths
     sqlite_database_ready = sqlite_database_path.exists()
+    legacy_database_ready = not missing_database_paths
+    database_ready = sqlite_database_ready or legacy_database_ready
 
     return {
         "ok": deepseek_key_configured and database_ready,
